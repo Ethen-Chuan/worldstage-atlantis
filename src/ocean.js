@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SceneTap } from './scene-tap.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -175,10 +176,13 @@ export class Ocean {
     this.resize();
     this.pointer = new THREE.Vector2();
     this.raycaster = new THREE.Raycaster();
-    let press = null;
-    this.renderer.domElement.addEventListener('pointerdown', event => { press = [event.clientX, event.clientY]; });
+    const tap = new SceneTap();
+    this.renderer.domElement.addEventListener('pointerdown', event => tap.down(event));
+    this.renderer.domElement.addEventListener('pointermove', event => tap.move(event));
+    this.renderer.domElement.addEventListener('pointercancel', event => tap.cancel(event));
+    this.renderer.domElement.addEventListener('lostpointercapture', event => tap.cancel(event));
     this.renderer.domElement.addEventListener('pointerup', event => {
-      if (!press || Math.hypot(press[0] - event.clientX, press[1] - event.clientY) > 5) return;
+      if (!tap.up(event)) return;
       const bounds = this.renderer.domElement.getBoundingClientRect();
       this.pointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
       this.raycaster.setFromCamera(this.pointer, this.camera);

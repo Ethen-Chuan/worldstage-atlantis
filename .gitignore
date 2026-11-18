@@ -7,3 +7,4 @@ dist/
 .vercel/
 work/
 .impeccable.md
+public/audio/orchestra/*.mp3

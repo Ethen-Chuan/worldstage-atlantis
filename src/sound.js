@@ -1,3 +1,6 @@
+import { Orchestra } from './orchestra.js';
+import { scoreFor } from './orchestra-score.js';
+
 export class OceanSound {
   constructor() {
     this.enabled = false;
@@ -5,25 +8,48 @@ export class OceanSound {
     this.context = null;
     this.master = null;
     this.voices = new Set();
-    this.site = 'palace'; this.intensity = 0; this.phrase = 0; this.score = []; this.narration = false;
+    this.site = 'palace'; this.intensity = 0; this.narration = false; this.userMuted = false; this.unlocked = false; this.trial = false;
+    this.levels = { music: 0.8, ambience: 0.22, effects: 0.65 }; this.onChange = () => {};
+    try { this.userMuted = localStorage.getItem('worldstage-muted') === 'true'; } catch {}
   }
 
   async toggle() {
+    if (this.enabled && this.context?.state === 'running' && this.orchestra?.status !== 'error') {
+      this.enabled = false; this.userMuted = true; this.stopChant();
+      this.master.gain.setTargetAtTime(0, this.context.currentTime, 0.15);
+      try { localStorage.setItem('worldstage-muted', 'true'); } catch {}
+      this.onChange(); return false;
+    }
+    this.userMuted = false;
+    try { localStorage.setItem('worldstage-muted', 'false'); } catch {}
+    await this.activateFromGesture(); return this.enabled;
+  }
+
+  async activateFromGesture() {
+    if (this.userMuted || document.hidden) return false;
     if (!this.context) this.create();
-    if (this.paused) await this.context.suspend(); else await this.context.resume();
-    this.enabled = !this.enabled;
-    if (!this.enabled) this.stopChant();
-    this.master.gain.setTargetAtTime(this.enabled ? 0.38 : 0, this.context.currentTime, 0.5);
-    return this.enabled;
+    if (this.context.state !== 'running') await this.context.resume();
+    if (this.userMuted || document.hidden) return false;
+    this.enabled = true; this.unlocked = true;
+    this.master.gain.setTargetAtTime(0.85, this.context.currentTime, 0.3); this.onChange();
+    try { await this.orchestra.load(); if (this.enabled) { this.orchestra.setScene(this.site); this.orchestra.setIntensity(this.intensity, this.trial, this.paused); } }
+    catch { this.onChange(); }
+    return true;
   }
 
   create() {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) throw new Error('当前浏览器不支持环境声音');
+    if (!AudioContext) throw new Error('当前浏览器不支持配乐');
     this.context = new AudioContext();
     this.master = this.context.createGain();
     this.master.gain.value = 0;
-    this.master.connect(this.context.destination);
+    const limiter = this.context.createDynamicsCompressor(); limiter.threshold.value = -6; limiter.knee.value = 4; limiter.ratio.value = 12; limiter.attack.value = 0.003; limiter.release.value = 0.25;
+    this.analyser = this.context.createAnalyser(); this.analyser.fftSize = 512; this.meter = new Float32Array(512);
+    this.master.connect(limiter).connect(this.analyser).connect(this.context.destination);
+    this.musicGain = this.context.createGain(); this.musicGain.gain.value = this.levels.music * (this.paused ? 0.65 : 1); this.musicGain.connect(this.master);
+    this.ambienceGain = this.context.createGain(); this.ambienceGain.gain.value = this.levels.ambience; this.ambienceGain.connect(this.master);
+    this.effectsGain = this.context.createGain(); this.effectsGain.gain.value = this.levels.effects; this.effectsGain.connect(this.master);
+    this.orchestra = new Orchestra(this.context, this.musicGain, () => this.onChange());
     const noiseBuffer = this.context.createBuffer(1, this.context.sampleRate * 6, this.context.sampleRate);
     const samples = noiseBuffer.getChannelData(0);
     let previous = 0;
@@ -39,63 +65,59 @@ export class OceanSound {
     filter.frequency.value = 310;
     const gain = this.context.createGain();
     gain.gain.value = 0.16;
-    source.connect(filter).connect(gain).connect(this.master);
+    source.connect(filter).connect(gain).connect(this.ambienceGain);
     source.start();
     this.waterFilter = filter; this.waterGain = gain;
-    const drone = this.context.createOscillator();
-    const droneGain = this.context.createGain();
-    drone.frequency.value = 52;
-    droneGain.gain.value = 0.09;
-    drone.connect(droneGain).connect(this.master);
-    drone.start();
     const convolver = this.context.createConvolver();
     const impulse = this.context.createBuffer(2, this.context.sampleRate * 4, this.context.sampleRate);
     for (let channel = 0; channel < 2; channel++) { const samples = impulse.getChannelData(channel); for (let index = 0; index < samples.length; index++) samples[index] = (Math.random() * 2 - 1) * Math.pow(1 - index / samples.length, 3) * 0.23; }
-    convolver.buffer = impulse; const wet = this.context.createGain(); wet.gain.value = 0.34; convolver.connect(wet).connect(this.master); this.reverb = convolver;
-    for (let index = 0; index < 4; index++) {
-      const oscillator = this.context.createOscillator(); const gain = this.context.createGain(); const lowpass = this.context.createBiquadFilter();
-      oscillator.type = index === 0 ? 'sine' : 'triangle'; oscillator.detune.value = index % 2 ? -4 : 3;
-      lowpass.type = 'lowpass'; lowpass.frequency.value = 530; gain.gain.value = index === 0 ? 0.08 : 0.023;
-      oscillator.connect(lowpass).connect(gain); gain.connect(this.master); gain.connect(convolver); oscillator.start(); this.score.push({ oscillator, gain });
-    }
+    convolver.buffer = impulse; const wet = this.context.createGain(); wet.gain.value = 0.34; convolver.connect(wet).connect(this.effectsGain); this.reverb = convolver;
     this.setScene(this.site);
-    this.scoreTimer = setInterval(() => {
-      if (!this.enabled || this.paused || document.hidden) return;
-      const theme = this.theme(); const interval = theme.notes[this.phrase++ % theme.notes.length];
-      this.note(theme.root + 24 + interval, 7, 'bell', 0.035 + this.intensity * 0.035);
-      if (this.phrase % 3 === 0) this.note(theme.root + 12, 9, 'pad', 0.05);
-    }, 4800);
-    document.addEventListener('visibilitychange', () => { if (document.hidden) { this.stopChant(); this.context.suspend(); } else if (this.enabled && !this.paused) this.context.resume(); });
+    this.context.addEventListener('statechange', () => this.onChange());
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { this.stopChant(); this.context.suspend().catch(() => {}); }
+      else if (this.enabled) this.context.resume().catch(() => this.onChange());
+    });
   }
 
   setPaused(paused) {
     if (this.paused === paused) return;
     this.paused = paused;
     if (!this.context) return;
-    if (paused) { this.stopChant(); this.context.suspend().catch(() => {}); }
-    else if (this.enabled && !document.hidden) this.context.resume().catch(() => {});
+    if (paused) this.stopChant();
+    this.orchestra.setIntensity(this.intensity, this.trial, paused);
+    this.musicGain.gain.setTargetAtTime(this.levels.music * (paused ? 0.65 : 1), this.context.currentTime, 1);
+    this.onChange();
   }
 
   theme() {
-    return {
-      palace: { root: 38, notes: [0, 7, 3, 10, 7], water: 260 }, gate: { root: 33, notes: [0, 7, 1, 5, 7], water: 175 },
-      garden: { root: 36, notes: [0, 3, 7, 10, 5], water: 360 }, choir: { root: 41, notes: [0, 7, 10, 3, 14], water: 210 },
-      vortex: { root: 38, notes: [0, 7, 14, 10, 3], water: 230 }, prism: { root: 43, notes: [0, 4, 7, 11, 14], water: 430 },
-      vents: { root: 31, notes: [0, 7, 3, 12, 10], water: 140 },
-    }[this.site] || { root: 36, notes: [0, 7, 3, 10], water: 280 };
+    const score = scoreFor(this.site); return { root: score.root - 24, water: score.water };
   }
 
   setScene(id) {
     this.site = id || 'open-sea'; if (!this.context) return;
     const theme = this.theme(); const now = this.context.currentTime;
-    this.score.forEach(({ oscillator }, index) => { oscillator.frequency.cancelScheduledValues(now); oscillator.frequency.setTargetAtTime(440 * 2 ** ((theme.root + [0, 12, 19, 27][index] - 69) / 12), now, 2.4); });
+    if (this.enabled) this.orchestra.setScene(this.site);
     this.waterFilter.frequency.setTargetAtTime(theme.water, now, 3);
-    this.waterGain.gain.setTargetAtTime(id === 'vents' ? 0.23 : 0.13, now, 3);
+    this.waterGain.gain.setTargetAtTime(id === 'vents' ? 0.18 : 0.12, now, 3); this.onChange();
   }
 
   setIntensity(value) {
     this.intensity = Math.max(0, Math.min(1, value)); if (!this.context) return;
-    this.score.forEach(({ gain }, index) => gain.gain.setTargetAtTime((index ? 0.023 : 0.08) * (1 + this.intensity * 0.65), this.context.currentTime, 1.6));
+    this.orchestra.setIntensity(this.intensity, this.trial, this.paused);
+  }
+
+  setTrial(active) { this.trial = active; this.orchestra?.setIntensity(this.intensity, active, this.paused); this.onChange(); }
+
+  setLevel(channel, value) {
+    if (!(channel in this.levels) || !Number.isFinite(value)) return;
+    this.levels[channel] = Math.max(0, Math.min(1, value));
+    this[`${channel}Gain`]?.gain.setTargetAtTime(this.levels[channel] * (channel === 'music' && this.paused ? 0.65 : 1), this.context.currentTime, 0.2); this.onChange();
+  }
+
+  inspect() {
+    let peak = 0; if (this.analyser) { this.analyser.getFloatTimeDomainData(this.meter); for (const value of this.meter) peak = Math.max(peak, Math.abs(value)); }
+    return { enabled: this.enabled, unlocked: this.unlocked, userMuted: this.userMuted, context: this.context?.state || 'locked', site: this.site, intensity: this.intensity, narration: this.narration, paused: this.paused, levels: { ...this.levels }, peak: Number(peak.toFixed(5)), orchestra: this.orchestra?.inspect() || { status: 'idle' } };
   }
 
   note(midi, duration = 4, type = 'bell', volume = 0.05) {
@@ -105,21 +127,21 @@ export class OceanSound {
       const oscillator = this.context.createOscillator(); const gain = this.context.createGain();
       oscillator.type = 'sine'; oscillator.frequency.value = 440 * 2 ** ((midi - 69) / 12) * harmonic;
       gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(volume / (index + 1) ** 2, now + (type === 'pad' ? 1.4 : 0.12)); gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-      oscillator.connect(gain); gain.connect(this.master); gain.connect(this.reverb); this.voices.add(oscillator);
+      oscillator.connect(gain); gain.connect(this.effectsGain); gain.connect(this.reverb); this.voices.add(oscillator);
       oscillator.onended = () => { this.voices.delete(oscillator); oscillator.disconnect(); gain.disconnect(); }; oscillator.start(now); oscillator.stop(now + duration + 0.1);
     }
   }
 
   ritual(id, text = '') {
     if (!this.enabled || !this.context || this.voices.size > 42) return false;
-    this.note(this.theme().root, 10, 'pad', 0.12);
+    this.orchestra?.accent('ritual');
     const now = this.context.currentTime;
     for (const [index, frequency] of [210, 590, 980].entries()) {
       const oscillator = this.context.createOscillator(); const filter = this.context.createBiquadFilter(); const gain = this.context.createGain();
       oscillator.type = 'sawtooth'; oscillator.frequency.setValueAtTime(id === 'gate' ? 61 : 73, now); oscillator.frequency.exponentialRampToValueAtTime(id === 'gate' ? 49 : 65, now + 4);
       filter.type = 'bandpass'; filter.frequency.setValueAtTime(frequency, now); filter.frequency.exponentialRampToValueAtTime(frequency * 0.68, now + 3); filter.Q.value = 7;
       gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.035 / (index + 1), now + 1); gain.gain.exponentialRampToValueAtTime(0.0001, now + 5);
-      oscillator.connect(filter).connect(gain); gain.connect(this.master); gain.connect(this.reverb); this.voices.add(oscillator);
+      oscillator.connect(filter).connect(gain); gain.connect(this.effectsGain); gain.connect(this.reverb); this.voices.add(oscillator);
       oscillator.onended = () => { this.voices.delete(oscillator); oscillator.disconnect(); filter.disconnect(); gain.disconnect(); }; oscillator.start(); oscillator.stop(now + 5.1);
     }
     return text ? this.chant(text) : true;
@@ -129,10 +151,13 @@ export class OceanSound {
     if (!this.enabled || !this.narration || !globalThis.speechSynthesis) return false;
     const voice = speechSynthesis.getVoices().find(voice => voice.localService && /^zh/i.test(voice.lang));
     if (!voice) return false;
-    this.stopChant(); const utterance = new SpeechSynthesisUtterance(String(text).slice(0, 100)); utterance.voice = voice; utterance.lang = voice.lang; utterance.rate = 0.7; utterance.pitch = 0.45; utterance.volume = 0.55; speechSynthesis.speak(utterance); return true;
+    this.stopChant(); const utterance = new SpeechSynthesisUtterance(String(text).slice(0, 120)); utterance.voice = voice; utterance.lang = voice.lang; utterance.rate = 0.7; utterance.pitch = 0.45; utterance.volume = this.levels.effects;
+    utterance.onstart = () => this.musicGain.gain.setTargetAtTime(this.levels.music * 0.4, this.context.currentTime, 0.2);
+    const restore = () => this.musicGain.gain.setTargetAtTime(this.levels.music * (this.paused ? 0.65 : 1), this.context.currentTime, 0.7);
+    utterance.onend = restore; utterance.onerror = restore; speechSynthesis.speak(utterance); return true;
   }
 
-  stopChant() { globalThis.speechSynthesis?.cancel(); }
+  stopChant() { globalThis.speechSynthesis?.cancel(); if (this.musicGain && this.context) this.musicGain.gain.setTargetAtTime(this.levels.music * (this.paused ? 0.65 : 1), this.context.currentTime, 0.7); }
 
   voice(creature, singing = false) {
     if (!this.enabled || !this.context) return;
@@ -152,7 +177,7 @@ export class OceanSound {
       gain.gain.linearRampToValueAtTime(creature === 'whale' ? 0.21 : 0.065, start + offset + duration * 0.2);
       gain.gain.exponentialRampToValueAtTime(0.001, start + offset + duration);
       pan.pan.value = index % 2 ? 0.3 : -0.3;
-      oscillator.connect(gain).connect(pan).connect(this.master);
+      oscillator.connect(gain).connect(pan).connect(this.effectsGain);
       this.voices.add(oscillator);
       oscillator.onended = () => { this.voices.delete(oscillator); oscillator.disconnect(); gain.disconnect(); pan.disconnect(); };
       oscillator.start(start + offset);
@@ -176,7 +201,7 @@ export class OceanSound {
       oscillator.frequency.value = frequency;
       gain.gain.setValueAtTime(0.16 / (index + 1), start);
       gain.gain.exponentialRampToValueAtTime(0.001, start + 4.5);
-      oscillator.connect(gain).connect(this.master);
+      oscillator.connect(gain).connect(this.effectsGain);
       this.voices.add(oscillator);
       oscillator.onended = () => { this.voices.delete(oscillator); oscillator.disconnect(); gain.disconnect(); };
       oscillator.start(start);

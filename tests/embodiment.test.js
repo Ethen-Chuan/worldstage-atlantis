@@ -30,3 +30,21 @@ test('pause preserves an ongoing viewpoint transition and movement position', ()
   for (let frame = 0; frame < 60; frame++) { embodiment.beforeSimulation(); embodiment.update(0); }
   assert.equal(embodiment.blend.elapsed, elapsed); assert.deepEqual(ocean.camera.position.toArray(), position.toArray());
 });
+
+test('entering a living object goes straight to first person without confirmation', () => {
+  const { embodiment, root } = fixture();
+  embodiment.enter({ root, shape: root, living: true, species: 'shark', name: 'shark' });
+  assert.equal(embodiment.firstPerson, true); assert.ok(embodiment.blend);
+  for (let frame = 0; frame < 120; frame++) { embodiment.beforeSimulation(); embodiment.update(1 / 60); }
+  assert.equal(embodiment.blend, null); assert.equal(root.visible, false);
+});
+
+test('switching targets preserves the original free-exploration return view', () => {
+  const { embodiment, root, ocean } = fixture();
+  embodiment.enter({ root, shape: root, living: true, species: 'shark', name: 'shark' });
+  const saved = embodiment.savedView; ocean.captureView = () => ({ position: [100, 100, 100] });
+  const statue = new THREE.Mesh(new THREE.BoxGeometry(4, 6, 4), new THREE.MeshStandardMaterial()); ocean.scene.add(statue);
+  embodiment.enter({ root: statue, living: false, point: new THREE.Vector3(0, 40, -40), name: 'statue' });
+  assert.equal(embodiment.savedView, saved); assert.equal(embodiment.firstPerson, false); assert.equal(root.visible, true);
+  embodiment.update(2); assert.equal(ocean.controls.autoRotate, true);
+});

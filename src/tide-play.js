@@ -134,12 +134,14 @@ export class TidePlay {
       ring.userData.noPick = true; ring.userData.noAO = true; ring.position.copy(point); ring.lookAt(index ? new THREE.Vector3(...course.points[index - 1]) : origin); group.add(ring);
       return { point, ring, collected: false };
     });
-    this.ocean.embodiment.enter({ root: actor.root, shape: actor.root, living: true, species, name: `${site.name} · 巡游使者`, animate: actor.animate, temporary: true });
+    this.ocean.embodiment.enter({ root: actor.root, shape: actor.root, living: true, species, name: `${site.name} · 巡游使者`, animate: actor.animate, temporary: true }, { firstPerson: false });
+    this.sound.setTrial?.(true);
     this.trial = { id, actor, group, targets, radius, start: this.ocean.time, progress: 0, previous: origin.clone(), elapsed: 0, finished: false, misses: 0, feedback: '', next: 0 };
   }
 
   stop() {
     if (!this.trial) return;
+    this.sound.setTrial?.(false);
     if (this.ocean.embodiment.active?.root === this.trial.actor.root) this.ocean.embodiment.exit();
     const geometries = new Set(); const materials = new Set();
     for (const root of [this.trial.actor.root, this.trial.group]) { root.removeFromParent(); root.traverse(object => { if (object.geometry) geometries.add(object.geometry); if (object.material) materials.add(object.material); }); }

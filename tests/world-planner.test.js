@@ -66,3 +66,11 @@ test('selected static objects and view changes obey capability preconditions', (
   assert.throws(() => validateWorldPlan(worldAction('cruise', { enabled: 'yes' }), context));
   assert.equal(planWorld('让眼前的奇观平静下来').kind, 'calm');
 });
+test('the gate accepts bounded personal invocations as text, never executable commands', () => {
+  const plan = planWorld('唤醒回声天门，呼唤失落的勇气');
+  assert.equal(plan.args.echo, '失落的勇气');
+  const gate = LANDMARKS.find(site => site.id === 'gate');
+  assert.doesNotThrow(() => validateWorldPlan(plan, { position: gate.center }));
+  assert.throws(() => validateWorldPlan(worldAction('ritual', { site: 'gate', echo: '回声'.repeat(60) }), { position: gate.center }));
+  assert.equal(planWorld('唤醒回声天门，召唤鲸鱼').args.summon, '鲸鱼');
+});

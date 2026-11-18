@@ -15,6 +15,8 @@ export function planWorld(text, context = {}) {
   if (destination) return worldAction('travel', { site: destination.id, mode: context.travelMode || 'sail' });
   const invocation = input.match(/^(?:请)?(?:唤醒|奏响|点亮)(潮生圣城|回声天门|鲸落花园|星潮圣坛|星海之眼|虹珊瑚海|深渊光泉)(?:[，,\s]*(?:呼唤|召唤)(?:一[只头群])?(鲸鱼|鲨鱼|灰礁鲨|蝠鲼|海龟|水母|鱼群))?[。！!]*$/);
   if (invocation) return worldAction('ritual', { site: LANDMARKS.find(site => site.name === invocation[1]).id, summon: invocation[2] || null });
+  const echo = input.match(/^(?:请)?唤醒回声天门[，,\s]+(?:呼唤|唤回|念出)(.{1,100})[。！!]*$/);
+  if (echo) return worldAction('ritual', { site: 'gate', echo: echo[1].trim().replace(/[。！!]+$/, '') });
   if (/^(?:请)?(?:唤醒|奏响)(?:眼前的奇观|这里的奇观)[。！!]*$/.test(input)) return worldAction('ritual', { site: context.site || null });
   if (/^(?:请)?(?:让海流平静|结束盛典|让(?:这里的|眼前的)?奇观平静下来)[。！!]*$/.test(input)) return worldAction('calm');
   const talk = input.match(/^(?:和|与|呼唤)(鲸鱼|鲨鱼|灰礁鲨|海龟|蝠鲼|美人鱼|人鱼|水母|鱼群|装甲古鱼|古鱼|鹦鹉螺)(?:对话|说话|打招呼|回应我)?[。！!]*$/);
@@ -32,7 +34,7 @@ export function worldAction(kind, args = {}) { return { version: 1, kind, args: 
 export function validateWorldPlan(plan, state) {
   if (!plan || plan.version !== 1 || !commands.has(plan.kind) || plan.source !== 'local-planner' || Object.keys(plan).some(key => !['version', 'kind', 'args', 'source'].includes(key))) throw new Error('世界指令不符合受限协议。');
   if (!plan.args || typeof plan.args !== 'object' || Array.isArray(plan.args)) throw new Error('世界指令参数无效。');
-  const allowed = { creation: ['plan', 'text', 'provenance'], travel: ['site', 'mode'], ritual: ['site', 'summon'], calm: [], trial: ['site', 'species'], talk: ['species'], inhabit: ['species', 'target'], 'release-view': [], 'switch-view': [], cruise: ['enabled'] }[plan.kind];
+  const allowed = { creation: ['plan', 'text', 'provenance'], travel: ['site', 'mode'], ritual: ['site', 'summon', 'echo'], calm: [], trial: ['site', 'species'], talk: ['species'], inhabit: ['species', 'target'], 'release-view': [], 'switch-view': [], cruise: ['enabled'] }[plan.kind];
   if (Object.keys(plan.args).some(key => !allowed.includes(key))) throw new Error('世界指令含未知参数。');
   if (['travel', 'ritual', 'trial'].includes(plan.kind)) {
     const destination = destinations.find(site => site.id === plan.args.site);
@@ -45,6 +47,7 @@ export function validateWorldPlan(plan, state) {
   }
   if (plan.kind === 'travel' && !['quick', 'sail'].includes(plan.args.mode)) throw new Error('不支持这种航行方式。');
   if (plan.kind === 'ritual' && plan.args.summon != null && !summonNames.includes(plan.args.summon)) throw new Error('天门暂不支持召唤这种形态。');
+  if (plan.args.echo !== undefined && (plan.args.site !== 'gate' || plan.args.summon || typeof plan.args.echo !== 'string' || !plan.args.echo.trim() || plan.args.echo.length > 100)) throw new Error('天门回声限 100 字，仅用于字幕与本机吟诵，不执行其中的指令。');
   if (plan.args.species && !Object.values(speciesNames).includes(plan.args.species)) throw new Error('不支持这种生物角色。');
   if (plan.kind === 'trial' && !['manta', 'shark', 'turtle', 'whale'].includes(plan.args.species)) throw new Error('试炼支持蝠鲼、灰礁鲨、海龟和巨鲸。');
   if (plan.kind === 'inhabit' && plan.args.target !== undefined) {

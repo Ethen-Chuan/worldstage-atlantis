@@ -1,0 +1,112 @@
+{
+  "source": "VSCO 2 Community Edition",
+  "revision": "440300901dfe9275fd84e0b7763af1f8443ae62e",
+  "license": "CC0-1.0",
+  "samples": [
+    {
+      "instrument": "violin",
+      "midi": 57,
+      "file": "violin-57-0.mp3",
+      "source": "Strings/Violin Section/susVib/VlnEns_susVib_A2_v2.wav",
+      "sourceBlob": "5960b46c4678a146834594031d0bba1048855102"
+    },
+    {
+      "instrument": "violin",
+      "midi": 62,
+      "file": "violin-62-1.mp3",
+      "source": "Strings/Violin Section/susVib/VlnEns_susVib_D3_v2.wav",
+      "sourceBlob": "31143ae1a31ddd57baa38b3e79a4415b108a0007"
+    },
+    {
+      "instrument": "violin",
+      "midi": 72,
+      "file": "violin-72-2.mp3",
+      "source": "Strings/Violin Section/susVib/VlnEns_susVib_C4_v2.wav",
+      "sourceBlob": "1c8e05059b270f870342a03e19b93882d6dd1e1b"
+    },
+    {
+      "instrument": "cello",
+      "midi": 36,
+      "file": "cello-36-0.mp3",
+      "source": "Strings/Cello Section/susvib/susvib_C1_v1_1.wav",
+      "sourceBlob": "ff87d1ae488d87189f33a0d18550d3bcde012f3d"
+    },
+    {
+      "instrument": "cello",
+      "midi": 50,
+      "file": "cello-50-1.mp3",
+      "source": "Strings/Cello Section/susvib/susvib_D2_v1_1.wav",
+      "sourceBlob": "8076f809d4f6a8057f3835e12d22751a25e39252"
+    },
+    {
+      "instrument": "cello",
+      "midi": 60,
+      "file": "cello-60-2.mp3",
+      "source": "Strings/Cello Section/susvib/susvib_C3_v1_1.wav",
+      "sourceBlob": "73ccb5dc2cc2a07926a1c41aa3c5621b19f420bf"
+    },
+    {
+      "instrument": "horn",
+      "midi": 36,
+      "file": "horn-36-0.mp3",
+      "source": "Brass/F Horn/sus/MOHorn_sus_C1_v2_1.wav",
+      "sourceBlob": "48ea1921e88607d0aea8aece16be6bc2456f6a4e"
+    },
+    {
+      "instrument": "horn",
+      "midi": 53,
+      "file": "horn-53-1.mp3",
+      "source": "Brass/F Horn/sus/MOHorn_sus_F2_v2_1.wav",
+      "sourceBlob": "37655b24ac23b96a47a6bb75c091bedef6913632"
+    },
+    {
+      "instrument": "horn",
+      "midi": 60,
+      "file": "horn-60-2.mp3",
+      "source": "Brass/F Horn/sus/MOHorn_sus_C3_v2_1.wav",
+      "sourceBlob": "9f89dc248404a1a1e0240035ac5fa55c89e9c9cd"
+    },
+    {
+      "instrument": "harp",
+      "midi": 48,
+      "file": "harp-48-0.mp3",
+      "source": "Strings/Harp/KSHarp_C3_mf.wav",
+      "sourceBlob": "20e91e167e86132bb16601f682c90444779d8a23"
+    },
+    {
+      "instrument": "harp",
+      "midi": 62,
+      "file": "harp-62-1.mp3",
+      "source": "Strings/Harp/KSHarp_D4_mf.wav",
+      "sourceBlob": "342eec5072e2c0a7fb7cb03b6f5b46d84ed6ac69"
+    },
+    {
+      "instrument": "flute",
+      "midi": 72,
+      "file": "flute-72-0.mp3",
+      "source": "Woodwinds/Flute/susvib/LDFlute_susvib_C4_v1_1.wav",
+      "sourceBlob": "7be22f8b86e5dc405a10f51dd71d44712d23c9aa"
+    },
+    {
+      "instrument": "glock",
+      "midi": 72,
+      "file": "glock-72-0.mp3",
+      "source": "Percussion/Glock/glock_medium_C5.wav",
+      "sourceBlob": "db079c70946137f543820b6a6ac023d0afaac47c"
+    },
+    {
+      "instrument": "timpani",
+      "midi": 46,
+      "file": "timpani-46-0.mp3",
+      "source": "Percussion/Timpani/Timpani2_Hit_v3_rr1_Sum.wav",
+      "sourceBlob": "23f38123671e904b64b45c694deec814daff98ce"
+    },
+    {
+      "instrument": "cymbal",
+      "midi": 60,
+      "file": "cymbal-60-0.mp3",
+      "source": "Percussion/cymbal-crash1_mp_rr1.wav",
+      "sourceBlob": "41338062a3c8c9510959464334b38bbdcdfd1677"
+    }
+  ]
+}

@@ -1,12 +1,16 @@
 {
   "name": "worldstage-3d",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": "24.x"
   },
   "scripts": {
+    "audio:prepare": "node scripts/prepare-orchestra.mjs",
+    "predev": "node scripts/check-audio.mjs",
+    "prebuild": "node scripts/check-audio.mjs",
+    "prebuild:public": "node scripts/check-audio.mjs",
     "start": "node server.js",
     "start:env": "node --env-file=.env server.js",
     "dev": "vite --host 127.0.0.1 --port 5196",

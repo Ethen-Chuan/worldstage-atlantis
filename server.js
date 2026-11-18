@@ -9,7 +9,7 @@ import { mediaConfig, publicMediaConfig, VideoBridge } from './video-bridge.js';
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(directory, 'dist');
 const port = Number(process.env.WORLDSTAGE_PORT || 5196);
-const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2', '.woff': 'font/woff', '.json': 'application/json' };
+const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2', '.woff': 'font/woff', '.json': 'application/json', '.mp3': 'audio/mpeg' };
 const config = modelConfig();
 const media = mediaConfig();
 const video = new VideoBridge(media);
@@ -85,7 +85,7 @@ const server = http.createServer(async (request, response) => {
     if (!['GET', 'HEAD'].includes(request.method)) { response.writeHead(405); response.end(); return; }
     if (pathname === '/health') {
       response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ product: 'worldstage-atlantis', mode: 'mythic-ocean-creation', version: 6 }));
+      response.end(JSON.stringify({ product: 'worldstage-atlantis', mode: 'mythic-ocean-creation', version: 8 }));
       return;
     }
     const candidate = path.resolve(root, '.' + (pathname === '/' ? '/index.html' : pathname));
