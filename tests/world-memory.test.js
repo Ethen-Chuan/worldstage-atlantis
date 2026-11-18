@@ -34,7 +34,7 @@ test('world memory excludes raw language, histories, consent flags and model con
 
 test('corrupt, oversized, future-version and unknown memory keys are rejected', () => {
   for (const raw of ['', null, '{broken', ' '.repeat(MEMORY_LIMIT + 1), JSON.stringify({ ...record(), version: 100 }), JSON.stringify({ ...record(), command: 'ignored' }), JSON.stringify({ ...record(), savedAt: 'bad' })]) assert.throws(() => readMemory(raw));
-  assert.throws(() => readMemory(JSON.stringify(record()).replace('"version":1', '"__proto__":{},"version":1')));
+  assert.throws(() => readMemory(JSON.stringify(record()).replace('"version":2', '"__proto__":{},"version":2')));
 });
 
 test('invalid identities, material values, coordinates and excessive entity counts are rejected', () => {

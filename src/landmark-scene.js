@@ -112,11 +112,26 @@ export class LandmarkScene {
       life.root.scale.setScalar(landmark.kind === 'garden' ? 1.5 : landmark.kind === 'choir' ? 3.8 : 1.8);
       if (life.setColor) life.setColor(landmark.kind === 'choir' ? 'pearl' : 'gold');
       root.add(life.root);
+      let portal = null;
+      if (landmark.id === 'gate') {
+        const material = new THREE.ShaderMaterial({
+          transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+          uniforms: { clock: { value: 0 }, energy: { value: 0 } },
+          vertexShader: 'varying vec2 gateUV; void main(){gateUV=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+          fragmentShader: `uniform float clock; uniform float energy; varying vec2 gateUV;
+          void main(){vec2 point=gateUV-0.5;float radius=length(point)*2.0;float angle=atan(point.y,point.x);float rim=exp(-pow((radius-0.89)*24.0,2.0));float wave=pow(0.5+0.5*sin(radius*62.0-clock*2.1+sin(angle*5.0)*0.6),14.0);float veil=(1.0-smoothstep(0.7,1.0,radius));vec3 color=mix(vec3(0.28,0.53,0.52),vec3(0.91,0.73,0.39),rim);gl_FragColor=vec4(color,(rim*0.7+wave*0.18+0.025)*veil*energy);}`,
+        });
+        portal = new THREE.Mesh(new THREE.PlaneGeometry(72, 72), material); portal.position.set(0, 39, 1); portal.userData.noPick = true; portal.userData.noAO = true; root.add(portal);
+      }
       const coral = sculptCoral(materials); coral.position.set(-25, 0, 27); coral.scale.setScalar(1.6); root.add(coral);
       root.position.set(landmark.center[0], floor, landmark.center[2]);
       this.scene.add(root);
-      this.entries.push({ landmark, root, life, floor, glyphs, activation: 0 });
+      this.entries.push({ landmark, root, life, floor, glyphs, activation: 0, portal, ritualStart: -Infinity, ending: null });
   }
+
+  respond(id, time) { this.prepare(id); const entry = this.entries.find(entry => entry.landmark.id === id); if (entry) { entry.ritualStart = time; entry.ending = null; } }
+
+  calm(time) { for (const entry of this.entries) if (entry.ending === null) entry.ending = time; }
 
   update(position, offset, time, delta) {
     for (const landmark of LANDMARKS.filter(item => ['gate', 'garden', 'choir'].includes(item.kind))) {
@@ -129,7 +144,11 @@ export class LandmarkScene {
       root.visible = distance < 880;
       if (!root.visible) continue;
       entry.activation = THREE.MathUtils.damp(entry.activation, distance < 125 ? 1 : 0, 1, delta);
-      for (const material of entry.glyphs) material.emissiveIntensity = 0.2 + entry.activation * 2.6;
+      const age = time - entry.ritualStart;
+      const fade = entry.ending === null ? 1 : 1 - THREE.MathUtils.smoothstep(time - entry.ending, 0, 2.5);
+      const ritual = age >= 0 && age < 36 ? THREE.MathUtils.smoothstep(age, 0, 4) * (1 - THREE.MathUtils.smoothstep(age, 28, 36)) * fade : 0;
+      for (const material of entry.glyphs) material.emissiveIntensity = 0.2 + entry.activation * 1.8 + ritual * 2.2;
+      if (entry.portal) { entry.portal.material.uniforms.clock.value = time; entry.portal.material.uniforms.energy.value = ritual; entry.portal.visible = ritual > 0.001; }
       life.setGlow?.(entry.activation > 0.3);
       if (delta > 0) life.animate(time * 0.7, delta);
       if (landmark.kind === 'garden') {

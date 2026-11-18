@@ -1,0 +1,54 @@
+.site-play { position: absolute; right: 39px; bottom: 170px; width: 224px; z-index: 3; padding: 20px 0 0; border-top: 1px solid var(--line); text-shadow: 0 2px 10px oklch(12% .02 175); }
+.site-play h3 { font-family: var(--serif); font-size: 22px; font-weight: 400; letter-spacing: 3px; margin: 12px 0; }
+.site-play p { color: var(--muted); font-size: 11px; line-height: 1.9; margin: 8px 0 14px; }
+.site-play-actions { display: grid; gap: 4px; justify-items: start; }
+.site-play-actions button { padding: 10px 0; min-height: 40px; font-size: 12px; border-bottom: 1px solid var(--line); }
+.site-play-actions button:last-child { font-size: 10px; color: var(--muted); border: 0; }
+.trial-species-label { display: flex; gap: 14px; align-items: center; font-size: 10px; color: var(--muted); margin-top: 5px; }
+.trial-species-label select { background: oklch(18% .025 185 / .8); color: var(--ink); padding: 6px; border: 1px solid var(--line); min-height: 32px; }
+.ritual-example { font-size: 10px; color: var(--muted); margin-top: 12px; padding: 8px 0; text-align: left; }
+.inhabit-prompt { position: absolute; top: 170px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 18px; background: var(--surface); border: 1px solid var(--line); padding: 6px 10px 6px 16px; z-index: 4; font-size: 11px; max-width: calc(100% - 36px); }
+.inhabit-prompt > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inhabit-prompt button { min-height: 36px; white-space: nowrap; font-size: 11px; }
+.inhabit-prompt button:last-child { font-size: 20px; }
+.inhabit-controls { position: absolute; left: 50%; transform: translateX(-50%); bottom: 58px; display: flex; align-items: center; gap: 38px; padding: 22px 26px; background: oklch(17% .024 186 / .94); border: 1px solid var(--line); z-index: 4; width: min(660px, calc(100% - 50px)); }
+.inhabit-controls strong { font-family: var(--serif); font-weight: 400; font-size: 22px; letter-spacing: 2px; display: block; margin-top: 10px; }
+.inhabit-controls p { color: var(--muted); font-size: 11px; line-height: 1.8; margin: 10px 0 0; }
+.inhabit-actions { display: grid; gap: 10px; margin-left: auto; flex-shrink: 0; }
+.inhabit-actions button { font-size: 11px; min-height: 38px; padding: 8px 12px; border: 1px solid var(--line); }
+.inhabit-actions small { color: var(--muted); font-size: 9px; margin-left: 10px; }
+.is-embodied .conversation, .is-embodied .selection-label, .is-embodied .site-play, .is-embodied .scene-caption, .is-embodied .discovery, .is-embodied .world-title { display: none !important; }
+.is-embodied.embodied-chat .conversation { display: block !important; bottom: 268px; width: min(600px, calc(100% - 40px)); }
+.embodied-chat .suggestions, .embodied-chat .composer-topline, .embodied-chat .composer-footer, .embodied-chat .swim-pad, .embodied-chat .trial-bearing { display: none; }
+.trial-hud { position: absolute; top: 148px; left: 40px; width: 300px; z-index: 4; }
+.trial-hud h3 { font: 28px var(--serif); letter-spacing: 4px; margin: 18px 0 12px; }
+.trial-hud p { font-size: 12px; line-height: 1.8; color: var(--muted); }
+.trial-hud > div { display: flex; align-items: center; gap: 18px; padding-top: 8px; font-variant-numeric: tabular-nums; }
+.trial-hud strong { font-size: 28px; font-weight: 400; }
+.trial-hud > div span { color: var(--muted); font-size: 13px; }
+.trial-hud button { font-size: 11px; border-bottom: 1px solid var(--line); padding: 10px 0; }
+.trial-bearing { position: absolute; left: 50%; top: 135px; transform: translateX(-50%); display: flex; align-items: center; gap: 13px; z-index: 4; padding: 10px 15px; background: oklch(17% .02 185 / .8); }
+.trial-bearing span { width: 18px; height: 24px; clip-path: polygon(50% 0,100% 100%,50% 75%,0 100%); background: oklch(90% .06 86); font-size: 0; }
+.trial-bearing b { font-size: 11px; font-weight: 400; }
+.festival-caption { position: absolute; top: 180px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 3; pointer-events: none; text-shadow: 0 2px 12px oklch(10% .02 180); }
+.festival-caption .eyebrow { justify-content: center; font-size: 8px; }
+.festival-caption h3 { font: 30px var(--serif); letter-spacing: 6px; margin: 16px 0; }
+.festival-caption p { color: var(--muted); font-size: 12px; letter-spacing: 3px; }
+.festival-caption button { pointer-events: auto; font-size: 10px; padding: 8px; border-bottom: 1px solid var(--line); }
+.swim-pad { position: absolute; bottom: 205px; right: 32px; display: grid; grid-template-columns: repeat(3,44px); gap: 4px; z-index: 4; }
+.swim-pad button { width: 44px; height: 44px; background: oklch(20% .025 185 / .84); border: 1px solid var(--line); border-radius: 4px; touch-action: none; user-select: none; }
+.swim-pad button:active { background: oklch(35% .04 170); }
+.immersive .site-play, .immersive .inhabit-prompt, .immersive .festival-caption, .panel-open .site-play { display: none; }
+.trial-species-label select { min-height: 40px; }
+@media (min-width: 1500px) { .site-play { right: 45px; width: 230px; } }
+@media (max-width: 700px) {
+  .site-play .trial-species-label { display: flex; justify-content: end; }
+  .is-embodied.embodied-chat .conversation { bottom: 255px; }
+  .embodied-chat .trial-hud, .embodied-chat .festival-caption { display: none; }
+  .is-embodied .trial-bearing { top: 355px; bottom: auto; }
+  .trial-complete #trial-instruction { display: none; }
+  .trial-complete.is-embodied .festival-caption { top: 330px; }
+  .is-embodied .capture-tools { display: none; }
+}
+@media (max-width: 1250px) and (min-width: 701px) { .site-play { width: 184px; right: 26px; bottom: 150px; } .site-play h3 { font-size: 21px; } .site-play .eyebrow { font-size: 7px; letter-spacing: 1px; } }
+@media (max-width: 700px) { .site-play { top: 171px; bottom: auto; right: 20px; width: 150px; border: 0; padding: 0; text-align: right; } .site-play .eyebrow, .site-play p, .site-play h3, .trial-species-label, .ritual-example { display: none; } .site-play-actions { justify-items: end; gap: 0; } .site-play-actions button { font-size: 11px; } .has-interacted .site-play h3, .has-explored .site-play h3 { display: block; font-size: 19px; } .has-explored .trial-species-label { display: flex; justify-content: end; } .inhabit-prompt { top: 244px; width: calc(100% - 40px); gap: 10px; padding-inline: 10px; } .inhabit-controls { bottom: 42px; width: calc(100% - 32px); padding: 18px; display: block; } .inhabit-controls strong { font-size: 20px; } .inhabit-controls p { font-size: 10px; } .inhabit-actions { display: flex; gap: 10px; margin-top: 15px; } .inhabit-actions button { flex: 1; font-size: 10px; padding-inline: 6px; } .trial-hud { top: 184px; left: 20px; width: 220px; } .trial-hud h3 { font-size: 23px; margin-block: 12px; } .trial-hud p { font-size: 10px; } .trial-hud .eyebrow { font-size: 7px; letter-spacing: 1.5px; } .trial-hud strong { font-size: 24px; } .trial-bearing { top: auto; bottom: 325px; max-width: calc(100% - 36px); white-space: nowrap; } .swim-pad { bottom: 225px; right: 20px; grid-template-columns: repeat(3,40px); } .swim-pad button { width: 40px; height: 40px; } .festival-caption { top: 266px; width: calc(100% - 40px); } .festival-caption h3 { font-size: 24px; } .festival-caption .eyebrow { font-size: 7px; } .is-embodied .festival-caption { top: 390px; } }

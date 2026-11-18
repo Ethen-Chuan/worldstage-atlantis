@@ -12,14 +12,15 @@ export function readMemory(raw) {
   if (typeof raw !== 'string' || !raw.length || raw.length > MEMORY_LIMIT) fail();
   let value;
   try { value = JSON.parse(raw); } catch { fail(); }
-  if (!exactKeys(value, ['version', 'savedAt', 'entities', 'selected', 'lighting', 'view', 'visited']) || value.version !== 1 || typeof value.savedAt !== 'string' || !Number.isFinite(Date.parse(value.savedAt))) fail();
+  if (!exactKeys(value, ['version', 'savedAt', 'entities', 'selected', 'lighting', 'view', 'visited']) || ![1, 2].includes(value.version) || typeof value.savedAt !== 'string' || !Number.isFinite(Date.parse(value.savedAt))) fail();
   if (!Array.isArray(value.entities) || value.entities.length > 20 || !['sunlit', 'moonlit', 'golden'].includes(value.lighting)) fail();
   if (!exactKeys(value.view, ['position', 'target']) || !vector(value.view.position) || !vector(value.view.target)) fail();
   if (Math.hypot(...value.view.position.map((part, index) => part - value.view.target[index])) < 0.5) fail();
   if (!Array.isArray(value.visited) || value.visited.length > LANDMARKS.length || value.visited.some(id => !LANDMARKS.some(landmark => landmark.id === id))) fail();
   const ids = new Set();
   for (const item of value.entities) {
-    if (!exactKeys(item, ['id', 'asset', 'position', 'params', 'orbit', 'resonance', 'following', 'preset'])) fail();
+    if (!exactKeys(item, ['id', 'asset', 'position', 'params', 'orbit', 'resonance', 'following', 'preset', ...(value.version === 2 ? ['leader'] : [])])) fail();
+    if (value.version === 1) item.leader = null;
     if (!/^form-\d{2,5}$/.test(item.id) || Number(item.id.slice(5)) > 99900 || ids.has(item.id) || !Object.hasOwn(ASSETS, item.asset) || !vector(item.position)) fail();
     ids.add(item.id);
     if (typeof item.following !== 'boolean' || typeof item.preset !== 'boolean' || item.following && !LIVING_ASSETS.includes(item.asset)) fail();
@@ -27,7 +28,12 @@ export function readMemory(raw) {
     for (const [key, limits] of Object.entries(ranges)) if (!Number.isFinite(item.params[key]) || item.params[key] < limits[0] || item.params[key] > limits[1]) fail();
   }
   for (const item of value.entities) {
-    for (const relation of ['orbit', 'resonance']) if (item[relation] !== null && (!ids.has(item[relation]) || item[relation] === item.id)) fail();
+    for (const relation of ['orbit', 'resonance', 'leader']) if (item[relation] !== null && (!ids.has(item[relation]) || item[relation] === item.id)) fail();
+    if (item.leader) {
+      if (item.following || item.orbit || !LIVING_ASSETS.includes(item.asset)) fail();
+      const visited = new Set([item.id]); let leader = value.entities.find(candidate => candidate.id === item.leader);
+      while (leader) { if (visited.has(leader.id) || !LIVING_ASSETS.includes(leader.asset)) fail(); visited.add(leader.id); leader = value.entities.find(candidate => candidate.id === leader.leader); }
+    }
     const around = value.entities.find(candidate => candidate.id === item.orbit);
     if (around && (!LIVING_ASSETS.includes(item.asset) || LIVING_ASSETS.includes(around.asset) || item.following)) fail();
     if (item.resonance && (item.asset !== 'whale' || value.entities.find(candidate => candidate.id === item.resonance)?.asset !== 'coral')) fail();
@@ -47,8 +53,8 @@ export function readMemory(raw) {
 
 export function writeMemory(state, view, visited, now = new Date()) {
   const value = {
-    version: 1, savedAt: now.toISOString(),
-    entities: state.entities.map(item => ({ id: item.id, asset: item.asset, position: [...item.position], params: { ...item.params }, orbit: item.orbit, resonance: item.resonance, following: item.following === true, preset: item.preset === true })),
+    version: 2, savedAt: now.toISOString(),
+    entities: state.entities.map(item => ({ id: item.id, asset: item.asset, position: [...item.position], params: { ...item.params }, orbit: item.orbit, resonance: item.resonance, leader: item.leader || null, following: item.following === true, preset: item.preset === true })),
     selected: state.selected, lighting: state.lighting,
     view: { position: [...view.position], target: [...view.target] }, visited: [...visited],
   };

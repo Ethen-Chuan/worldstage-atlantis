@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { sculptTemple, sculptArch, sculptGate, sculptCoral, sculptTrident } from './sculptures.js';
 import { createWhale, createManta, createJellies } from './creatures.js';
+import { createShark } from './shark.js';
 import { createAncientFish, createTurtle, createNautilus, createMermaid } from './mythic-creatures.js';
 import { COLORS, ASSETS, LIVING_ASSETS } from './creation.js';
 import { seededRandom } from './core.js';
@@ -57,6 +58,7 @@ export class CreationScene {
     this.selection.rotation.x = -Math.PI / 2;
     this.selection.visible = false;
     this.selection.userData.noAO = true;
+    this.selection.userData.noPick = true;
     this.root.add(this.selection);
     const random = seededRandom(158);
     const dustPosition = [];
@@ -75,7 +77,7 @@ export class CreationScene {
       if (!this.templates.has(item.asset)) this.templates.set(item.asset, factories[item.asset](this.materials));
       result = { root: this.templates.get(item.asset).clone(true), animate: () => {} };
     } else {
-      const creatures = { whale: createWhale, manta: createManta, jelly: createJellies, shoal: makeShoal, ancient: createAncientFish, turtle: createTurtle, nautilus: createNautilus, mermaid: createMermaid };
+      const creatures = { whale: createWhale, shark: createShark, manta: createManta, jelly: createJellies, shoal: makeShoal, ancient: createAncientFish, turtle: createTurtle, nautilus: createNautilus, mermaid: createMermaid };
       result = creatures[item.asset]();
     }
     const shape = result.root;
@@ -128,7 +130,7 @@ export class CreationScene {
         if (instant) entry.age = 10;
         this.objects.set(item.id, entry);
       }
-      if (item.following !== entry.item.following || item.orbit !== entry.item.orbit) entry.roamStart = entry.clock;
+      if (item.following !== entry.item.following || item.orbit !== entry.item.orbit || item.leader !== entry.item.leader) entry.roamStart = entry.clock;
       if (instant) {
         entry.followPosition.fromArray(item.position); entry.velocity.set(0, 0, 0); entry.roamStart = entry.clock;
         entry.currentScale = item.params.scale; entry.currentHeight = item.params.height; entry.currentSpeed = item.params.speed; entry.currentSpread = item.params.spread;
@@ -141,7 +143,7 @@ export class CreationScene {
         if (!base || !material.color) continue;
         const tint = new THREE.Color(COLORS[item.params.color]);
         const surface = material.userData.surface;
-        const factor = item.asset === 'jelly' ? 0.82 : LIVING_ASSETS.includes(item.asset) ? 0.4 : ['gold', 'copper', 'coral', 'coralLight'].includes(surface) ? 0.74 : 0.08;
+        const factor = item.asset === 'jelly' ? 0.82 : LIVING_ASSETS.includes(item.asset) ? item.params.color === 'teal' ? 0.06 : 0.4 : ['gold', 'copper', 'coral', 'coralLight'].includes(surface) ? 0.74 : 0.08;
         material.userData.targetColor = base.clone().lerp(tint, material.userData.keepColor ? 0 : factor).multiplyScalar(1 - item.params.weathering * 0.16);
         if (isNew || instant) material.color.copy(material.userData.targetColor);
         if (Number.isFinite(material.userData.baseRoughness)) material.userData.targetRoughness = Math.min(1, material.userData.baseRoughness + item.params.weathering * 0.03);
@@ -194,10 +196,16 @@ export class CreationScene {
         destination.copy(reference.root.position).add(this.offset).add(new THREE.Vector3(Math.cos(angle) * radius, Math.max(18, reference.size.y * reference.currentScale * 0.52), Math.sin(angle) * radius));
         heading = -angle;
       }
+      if (item.leader && this.objects.has(item.leader)) {
+        const leader = this.objects.get(item.leader);
+        const separation = Math.max(12, leader.size.z * leader.currentScale * 0.65 + entry.size.z * entry.currentScale * 0.4);
+        const formation = new THREE.Vector3(Math.sin(Number(item.id.slice(5)) * 2.4) * 8, -4, separation).applyAxisAngle(new THREE.Vector3(0, 1, 0), leader.shape.rotation.y);
+        destination.copy(leader.followPosition).add(formation);
+      }
       if (living) {
         springPosition(entry.followPosition, entry.velocity, destination, (item.following ? 1.65 : 2.7) * Math.sqrt(Math.max(0.2, entry.currentSpeed)), delta);
         root.position.copy(entry.followPosition).sub(this.offset);
-        if ((item.following || item.orbit) && entry.velocity.lengthSq() > 0.03) heading = Math.atan2(-entry.velocity.x, -entry.velocity.z);
+        if ((item.following || item.orbit || item.leader) && entry.velocity.lengthSq() > 0.03) heading = Math.atan2(-entry.velocity.x, -entry.velocity.z);
         if (item.asset !== 'jelly') {
           const difference = Math.atan2(Math.sin(heading - shape.rotation.y), Math.cos(heading - shape.rotation.y));
           shape.rotation.y = dampAngle(shape.rotation.y, heading, ['whale', 'ancient'].includes(item.asset) ? 1.15 : 1.8, delta);
@@ -252,14 +260,24 @@ export class CreationScene {
   }
 
   inspect() {
-    return [...this.objects.values()].map(entry => ({ id: entry.item.id, name: ASSETS[entry.item.asset], position: entry.root.position.toArray(), rotation: entry.shape.rotation.toArray().slice(0, 3), velocity: entry.velocity.toArray(), speed: entry.currentSpeed, scale: entry.currentScale, age: entry.age, growing: entry.age < entry.duration, orbit: entry.item.orbit, following: Boolean(entry.item.following), resonance: entry.resonanceLevel || 0 }));
+    return [...this.objects.values()].map(entry => ({ id: entry.item.id, name: ASSETS[entry.item.asset], position: entry.root.position.toArray(), rotation: entry.shape.rotation.toArray().slice(0, 3), velocity: entry.velocity.toArray(), speed: entry.currentSpeed, scale: entry.currentScale, age: entry.age, growing: entry.age < entry.duration, orbit: entry.item.orbit, leader: entry.item.leader, following: Boolean(entry.item.following), resonance: entry.resonanceLevel || 0 }));
+  }
+
+  displaceFollowing(displacement) {
+    const travelers = new Set([...this.objects.values()].filter(entry => entry.item.following).map(entry => entry.item.id));
+    for (let depth = 0; depth < this.objects.size; depth++) {
+      let added = false;
+      for (const entry of this.objects.values()) if (travelers.has(entry.item.leader) && !travelers.has(entry.item.id)) { travelers.add(entry.item.id); added = true; }
+      if (!added) break;
+    }
+    for (const id of travelers) this.objects.get(id).followPosition.add(displacement);
   }
 
   captureFollowing(state) {
     const captured = structuredClone(state);
     for (const item of captured.entities) {
       const entry = this.objects.get(item.id);
-      if (item.following && entry?.followPosition) item.position = entry.followPosition.toArray();
+      if ((item.following || item.leader) && entry?.followPosition) item.position = entry.followPosition.toArray();
       else if (item.orbit && entry) item.position = entry.root.position.clone().add(this.offset).add(new THREE.Vector3(0, -entry.currentHeight, 0)).toArray();
     }
     return captured;

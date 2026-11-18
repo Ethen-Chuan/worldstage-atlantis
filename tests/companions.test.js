@@ -8,7 +8,7 @@ import { StoneWorkshop } from '../src/sculptures.js';
 const say = (state, text) => executeCreation(state, interpretCreation(text, state), text);
 
 test('manta and celestial gate are distinct supported creations', () => {
-  assert.equal(Object.keys(ASSETS).length, 13);
+  assert.equal(Object.keys(ASSETS).length, 14);
   let result = say(initialCreation(), '在前方创造一座星门');
   assert.equal(result.changed, true); assert.equal(result.state.entities.at(-1).asset, 'gate');
   result = say(result.state, '创造一只蝠鲼，然后让它环绕星门游');

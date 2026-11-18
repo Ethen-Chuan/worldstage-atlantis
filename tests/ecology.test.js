@@ -30,7 +30,7 @@ test('new living assets create, follow, recolor, undo and survive manual world m
     const memory = readMemory(writeMemory(state, { position: [73, 26, 174], target: [0, 30, 0] }, ['palace']));
     assert.deepEqual(memory.state.entities, state.entities);
   }
-  assert.equal(Object.keys(ASSETS).length, 13);
+  assert.equal(Object.keys(ASSETS).length, 14);
   assert.equal(say(initialCreation(), '创造三位美人鱼').state.entities.length, 7);
   assert.equal(say(initialCreation(), '不要创造海龟').changed, false);
 });

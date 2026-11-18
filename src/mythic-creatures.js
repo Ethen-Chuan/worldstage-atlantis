@@ -64,7 +64,7 @@ function patternedSkin(material, kind) {
 }
 
 export function createAncientFish() {
-  const root = new THREE.Group(); root.name = 'fantasy-armoured-ancient-fish';
+  const root = new THREE.Group(); root.name = 'fantasy-armoured-ancient-fish'; root.userData.creature = 'ancient';
   const skin = organicSurface(surface('#617f78', 0.64, 0.04), 'ancient', { relief: 0.17 });
   const plate = organicSurface(surface('#577a73', 0.59, 0.15), 'ancient', { relief: 0.1 });
   const finSkin = organicSurface(surface('#637f6d', 0.61, 0.08), 'ancient', { relief: 0.042, length: 12 });
@@ -127,17 +127,19 @@ export function createAncientFish() {
 }
 
 export function createTurtle() {
-  const root = new THREE.Group(); root.name = 'reef-turtle';
-  const skin = surface('#9da77c', 0.84); const shell = surface('#65755a', 0.65); patternedSkin(shell, 'turtle');
+  const root = new THREE.Group(); root.name = 'reef-turtle'; root.userData.creature = 'turtle';
+  const skin = surface('#9a9b76', 0.78, 0); patternedSkin(skin, 'turtle'); const shell = surface('#65694a', 0.55, 0); patternedSkin(shell, 'turtle');
   const seam = surface('#b9ad79', 0.8); const eye = surface('#162f2b', 0.22);
-  ellipsoid(root, shell, [0, 0.3, 0], [2.05, 1, 2.6], 32);
+  ellipsoid(root, shell, [0, 0.3, 0], [2.05, 0.86, 2.6], 48);
   ellipsoid(root, seam, [0, -0.15, 0], [1.9, 0.45, 2.4]);
-  ellipsoid(root, skin, [0, 0, -2.5], [0.6, 0.56, 1.2]);
+  ellipsoid(root, skin, [0, 0, -2.35], [0.44, 0.38, 0.8]);
+  ellipsoid(root, skin, [0, 0.03, -3], [0.58, 0.49, 0.75], 32);
+  tube(root, [[-0.39, -0.17, -3.48], [0, -0.23, -3.7], [0.39, -0.17, -3.48]], 0.02, eye, 18);
   for (const side of [-1, 1]) ellipsoid(root, eye, [side * 0.48, 0.13, -3.05], [0.085, 0.12, 0.13], 12);
   for (let row = 0; row < 5; row++) {
     const depth = (row - 2) * 0.87;
-    const vertical = Math.sqrt(1 - depth * depth / 7) * 0.9 + 0.31;
-    const ring = part(root, new THREE.TorusGeometry(0.66, 0.035, 4, 6), seam, [0, vertical, depth], [1, 1, 1], [Math.PI / 2, 0, 0]);
+    const vertical = Math.sqrt(1 - depth * depth / 7) * 0.78 + 0.31;
+    const ring = part(root, new THREE.TorusGeometry(0.66, 0.019, 6, 6), seam, [0, vertical, depth], [1, 1, 1], [Math.PI / 2, 0, 0]);
     ring.scale.set(0.95, 0.75, 1);
     for (const side of [-1, 1]) tube(root, [[side * 0.65, vertical, depth], [side * 1.23, vertical - 0.17, depth + 0.15], [side * 1.75, 0.6, depth + 0.3]], 0.025, seam, 8);
   }
@@ -152,7 +154,7 @@ export function createTurtle() {
 }
 
 export function createNautilus() {
-  const root = new THREE.Group(); root.name = 'spiral-shell-drifter';
+  const root = new THREE.Group(); root.name = 'spiral-shell-drifter'; root.userData.creature = 'nautilus';
   const shell = surface('#dbc7a5', 0.53); patternedSkin(shell, 'shell');
   const skin = surface('#b29a81', 0.68); const dark = surface('#263933', 0.4);
   ellipsoid(root, shell, [0, 0, 0], [0.68, 1.65, 1.65], 32);
@@ -175,22 +177,35 @@ export function createNautilus() {
 }
 
 export function createMermaid() {
-  const root = new THREE.Group(); root.name = 'pearl-guardian-mermaid';
-  const ivory = surface('#d9c4a7', 0.6); const teal = surface('#548f87', 0.45, 0.25); patternedSkin(teal, 'scales');
+  const root = new THREE.Group(); root.name = 'pearl-guardian-mermaid'; root.userData.creature = 'mermaid';
+  const ivory = new THREE.MeshPhysicalMaterial({ color: '#bea58b', roughness: 0.65, metalness: 0, clearcoat: 0.07 }); const teal = surface('#416c65', 0.57, 0.08); patternedSkin(teal, 'scales');
   const gold = surface('#d6b675', 0.38, 0.62); const hair = surface('#375d56', 0.68);
   const pearl = surface('#e2dfc4', 0.3, 0.22); const dark = surface('#183b39', 0.45); const lips = surface('#a77368', 0.7);
   for (const material of [ivory, pearl, dark, lips]) material.userData.keepColor = true;
   const profile = [[0.34, 0.7], [0.47, 1.02], [0.37, 1.45], [0.43, 1.9], [0.65, 2.35], [0.64, 2.55], [0.28, 2.72], [0.19, 2.86]].map(([radius, height]) => new THREE.Vector2(radius, height));
   const torso = part(root, new THREE.LatheGeometry(profile, 28), teal); torso.scale.z = 0.7;
   ellipsoid(root, ivory, [0, 2.88, 0], [0.21, 0.37, 0.21]);
-  ellipsoid(root, ivory, [0, 3.48, -0.04], [0.42, 0.59, 0.34], 32);
-  ellipsoid(root, ivory, [0, 3.33, -0.29], [0.075, 0.13, 0.09], 16);
+  const face = new THREE.SphereGeometry(1, 64, 48); const faceVertices = face.attributes.position;
+  for (let index = 0; index < faceVertices.count; index++) {
+    const horizontal = faceVertices.getX(index); const vertical = faceVertices.getY(index); const depth = faceVertices.getZ(index);
+    const front = Math.max(0, -depth); const cheek = Math.exp(-(((vertical + 0.02) / 0.3) ** 2));
+    const jaw = vertical < -0.2 ? 1 - (-vertical - 0.2) * 0.3 : 1;
+    const nose = Math.exp(-((horizontal / 0.18) ** 2)) * Math.exp(-(((vertical + 0.1) / 0.29) ** 2)) * 0.15;
+    const sockets = Math.exp(-(((Math.abs(horizontal) - 0.4) / 0.18) ** 2 + ((vertical - 0.12) / 0.13) ** 2)) * 0.035;
+    faceVertices.setXYZ(index, horizontal * 0.39 * jaw * (1 + cheek * 0.06), vertical * 0.57, depth * 0.33 - front * front * nose + front * sockets);
+  }
+  face.computeVertexNormals(); part(root, face, ivory, [0, 3.48, -0.04]);
   for (const side of [-1, 1]) {
-    ellipsoid(root, dark, [side * 0.155, 3.52, -0.342], [0.083, 0.024, 0.025], 16);
+    ellipsoid(root, pearl, [side * 0.147, 3.55, -0.331], [0.076, 0.033, 0.022], 24);
+    ellipsoid(root, dark, [side * 0.143, 3.55, -0.351], [0.027, 0.027, 0.013], 20);
+    tube(root, [[side * 0.073, 3.552, -0.332], [side * 0.146, 3.582, -0.344], [side * 0.22, 3.552, -0.321]], 0.012, ivory, 16);
+    tube(root, [[side * 0.073, 3.551, -0.332], [side * 0.146, 3.52, -0.344], [side * 0.22, 3.552, -0.321]], 0.009, ivory, 16);
+    ellipsoid(root, ivory, [side * 0.375, 3.48, -0.01], [0.064, 0.125, 0.07], 24);
     tube(root, [[side * 0.07, 3.63, -0.31], [side * 0.15, 3.66, -0.319], [side * 0.24, 3.62, -0.286]], 0.018, hair, 10);
     ellipsoid(root, gold, [side * 0.41, 3.35, 0], [0.043, 0.12, 0.05], 10);
   }
-  tube(root, [[-0.1, 3.17, -0.30], [0, 3.15, -0.326], [0.1, 3.17, -0.30]], 0.018, lips, 10);
+  tube(root, [[-0.082, 3.245, -0.34], [-0.027, 3.253, -0.37], [0, 3.245, -0.376], [0.027, 3.253, -0.37], [0.082, 3.245, -0.34]], 0.012, lips, 24);
+  tube(root, [[-0.078, 3.241, -0.34], [0, 3.227, -0.37], [0.078, 3.241, -0.34]], 0.01, lips, 20);
   part(root, new THREE.TorusGeometry(0.43, 0.027, 6, 28), gold, [0, 3.83, 0], [1, 0.8, 1], [Math.PI / 2, 0, 0]);
   for (let jewel = 0; jewel < 9; jewel++) {
     const angle = (jewel / 8 - 0.5) * Math.PI * 1.1;
@@ -199,15 +214,22 @@ export function createMermaid() {
   }
   const tresses = new THREE.Group(); root.add(tresses);
   ellipsoid(tresses, hair, [0, 3.61, 0.12], [0.44, 0.53, 0.32]);
-  for (let strand = 0; strand < 18; strand++) {
-    const horizontal = (strand / 17 - 0.5) * 0.82;
-    tube(tresses, [[horizontal, 3.83 - Math.abs(horizontal) * 0.6, 0.12], [horizontal * 1.1, 3.05, 0.42], [horizontal * 1.7, 2.4, 0.95], [horizontal * 2, 1.8 + strand % 3 * 0.1, 1.7]], 0.043 + strand % 3 * 0.009, hair, 22);
+  for (let strand = 0; strand < 48; strand++) {
+    const horizontal = (strand / 47 - 0.5) * 0.82;
+    const sweep = Math.sin(strand * 1.71) * 0.12;
+    tube(tresses, [[horizontal, 3.83 - Math.abs(horizontal) * 0.6, 0.05], [horizontal * 1.2 + sweep, 3.05, 0.36], [horizontal * 1.7 + sweep, 2.4 + sweep, 0.86], [horizontal * 2.1 + sweep, 1.7 + strand % 5 * 0.08, 1.55 + sweep]], 0.015 + strand % 3 * 0.006, hair, 32);
   }
   const arms = [];
   for (const side of [-1, 1]) {
     const arm = new THREE.Group(); arm.position.set(side * 0.56, 2.43, 0); root.add(arm);
     tube(arm, [[0, 0, 0], [side * 0.22, -0.46, 0.04], [side * 0.36, -0.95, -0.18]], 0.12, ivory);
     ellipsoid(arm, ivory, [side * 0.4, -1.1, -0.22], [0.095, 0.2, 0.075]);
+    for (let finger = 0; finger < 4; finger++) {
+      const offset = (finger - 1.5) * 0.039;
+      const length = 0.18 + Math.sin((finger + 1) / 5 * Math.PI) * 0.08;
+      tube(arm, [[side * 0.4 + offset, -1.2, -0.245], [side * 0.4 + offset * 1.12, -1.2 - length * 0.6, -0.275], [side * 0.4 + offset * 1.16, -1.2 - length, -0.23]], 0.017, ivory, 12);
+    }
+    tube(arm, [[side * 0.33, -1.1, -0.22], [side * 0.27, -1.19, -0.26], [side * 0.28, -1.29, -0.24]], 0.026, ivory, 12);
     part(arm, new THREE.TorusGeometry(0.126, 0.027, 6, 16), gold, [side * 0.14, -0.32, 0.03], [1, 1, 1], [Math.PI / 2, 0, side * -0.35]);
     consolidate(arm); arms.push(arm);
     tube(root, [[side * 0.12, 2.65, -0.22], [side * 0.34, 2.37, -0.36], [side * 0.49, 2.04, -0.24], [side * 0.23, 1.62, -0.29]], 0.033, gold);

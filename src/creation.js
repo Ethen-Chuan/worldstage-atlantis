@@ -1,6 +1,6 @@
 import { seaHeight } from './terrain.js';
-export const ASSETS = Object.freeze({ temple: '环形神殿', arch: '潮汐拱门', gate: '潮汐星门', coral: '珊瑚花园', whale: '远古巨鲸', manta: '远洋蝠鲼', jelly: '水母群', shoal: '银色鱼群', trident: '海神三叉戟', ancient: '装甲古鱼', turtle: '海龟', nautilus: '鹦鹉螺', mermaid: '珍珠人鱼' });
-export const LIVING_ASSETS = ['whale', 'manta', 'jelly', 'shoal', 'ancient', 'turtle', 'nautilus', 'mermaid'];
+export const ASSETS = Object.freeze({ temple: '环形神殿', arch: '潮汐拱门', gate: '潮汐星门', coral: '珊瑚花园', whale: '座头巨鲸', shark: '灰礁鲨', manta: '远洋蝠鲼', jelly: '水母群', shoal: '银色鱼群', trident: '海神三叉戟', ancient: '装甲古鱼', turtle: '海龟', nautilus: '鹦鹉螺', mermaid: '珍珠人鱼' });
+export const LIVING_ASSETS = ['whale', 'shark', 'manta', 'jelly', 'shoal', 'ancient', 'turtle', 'nautilus', 'mermaid'];
 export const COLORS = Object.freeze({ gold: '#d7af62', teal: '#68a897', pearl: '#d7d6b8', rose: '#ca8c95', blue: '#779fc2' });
 export const CREATION_EXAMPLES = [
   { label: '与海龟一起探索', text: '创造一只海龟，然后让它跟随我' },
@@ -30,7 +30,7 @@ export const CREATION_SCHEMA = {
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 const clone = value => structuredClone(value);
 const defaults = asset => ({ scale: 1, height: 0, speed: 1, color: asset === 'coral' ? 'gold' : asset === 'jelly' ? 'pearl' : 'teal', glow: false, weathering: 0.35, spread: 1 });
-const entity = (id, asset, position, params = {}, preset = false) => ({ id, asset, name: `${ASSETS[asset]} · ${id.replace('form-', '')}`, position, params: { ...defaults(asset), ...params }, orbit: null, resonance: null, following: false, preset });
+const entity = (id, asset, position, params = {}, preset = false) => ({ id, asset, name: `${ASSETS[asset]} · ${id.replace('form-', '')}`, position, params: { ...defaults(asset), ...params }, orbit: null, resonance: null, leader: null, following: false, preset });
 
 export function initialCreation() {
   return {
@@ -38,7 +38,7 @@ export function initialCreation() {
       entity('form-01', 'temple', [20, -7, -167], { scale: 2.1, color: 'gold', weathering: 0.42 }, true),
       entity('form-02', 'trident', [-8, -5, 21], { scale: 1.1, color: 'gold' }, true),
       entity('form-03', 'coral', [-37, -6, 59], { scale: 1.2, color: 'gold' }, true),
-      entity('form-04', 'whale', [-5, 58, -36], { scale: 0.75, color: 'teal', speed: 0.6 }, true),
+      entity('form-04', 'whale', [-5, 65, -36], { scale: 1.5, color: 'teal', speed: 0.6 }, true),
     ], selected: null, lastCreated: [], focused: {}, nextId: 5, lighting: 'sunlit', paused: false, past: [], future: [], revision: 0, anchor: null, viewpoint: null,
   };
 }
@@ -73,8 +73,8 @@ export function validateCreationPlan(value) {
   return { operations, issues: [...value.issues] };
 }
 
-const assetPattern = /(?:环形)?神殿|宫殿|殿堂|星门|天门|拱门|城门|珊瑚(?:花园)?|鲸鱼|巨鲸|鲸|蝠鲼|魔鬼鱼|水母(?:群)?|鱼群|三叉戟|装甲古鱼|远古巨鱼|远古海兽|古鱼|海龟|鹦鹉螺|(?:美|珍珠)?人鱼/;
-const assetOf = text => /神殿|宫殿|殿堂/.test(text) ? 'temple' : /星门|天门/.test(text) ? 'gate' : /拱门|城门/.test(text) ? 'arch' : /珊瑚/.test(text) ? 'coral' : /装甲古鱼|远古巨鱼|远古海兽|古鱼/.test(text) ? 'ancient' : /海龟/.test(text) ? 'turtle' : /鹦鹉螺/.test(text) ? 'nautilus' : /人鱼/.test(text) ? 'mermaid' : /鲸/.test(text) ? 'whale' : /蝠鲼|魔鬼鱼/.test(text) ? 'manta' : /水母/.test(text) ? 'jelly' : /鱼群/.test(text) ? 'shoal' : /三叉戟/.test(text) ? 'trident' : null;
+const assetPattern = /(?:环形)?神殿|宫殿|殿堂|星门|天门|拱门|城门|珊瑚(?:花园)?|鲸鱼|巨鲸|鲸|(?:灰礁)?鲨(?:鱼)?|蝠鲼|魔鬼鱼|水母(?:群)?|鱼群|三叉戟|装甲古鱼|远古巨鱼|远古海兽|古鱼|海龟|鹦鹉螺|(?:美|珍珠)?人鱼/;
+const assetOf = text => /神殿|宫殿|殿堂/.test(text) ? 'temple' : /星门|天门/.test(text) ? 'gate' : /拱门|城门/.test(text) ? 'arch' : /珊瑚/.test(text) ? 'coral' : /装甲古鱼|远古巨鱼|远古海兽|古鱼/.test(text) ? 'ancient' : /海龟/.test(text) ? 'turtle' : /鹦鹉螺/.test(text) ? 'nautilus' : /人鱼/.test(text) ? 'mermaid' : /鲨/.test(text) ? 'shark' : /鲸/.test(text) ? 'whale' : /蝠鲼|魔鬼鱼/.test(text) ? 'manta' : /水母/.test(text) ? 'jelly' : /鱼群/.test(text) ? 'shoal' : /三叉戟/.test(text) ? 'trident' : null;
 function resolveMention(text, state, fallback = '$selection') {
   const explicit = text.match(/form-\d{2,5}/)?.[0];
   if (explicit) return explicit;
@@ -127,7 +127,7 @@ export function interpretCreation(raw, state) {
     if (creation) {
       if (/和|以及|与|还有/.test(creation[1])) { issues.push('本地规则每个分句只创造一种事物，请用“然后创造……”分开描述，避免漏掉要求。'); continue; }
       const asset = assetOf(creation[1]);
-      if (!asset) { issues.push('当前支持神殿、拱门、星门、珊瑚、鲸鱼、蝠鲼、水母、鱼群、三叉戟、装甲古鱼、海龟、鹦鹉螺和人鱼；其他形态尚不支持。'); continue; }
+      if (!asset) { issues.push('当前支持神殿、拱门、星门、珊瑚、鲸鱼、鲨鱼、蝠鲼、水母、鱼群、三叉戟、装甲古鱼、海龟、鹦鹉螺和人鱼；其他形态尚不支持。'); continue; }
       if (/不要|别|不许/.test(clause.slice(0, creation.index))) { issues.push('已保留世界，没有执行这条否定造物要求。'); continue; }
       const number = creation[1].match(/(\d+|一|二|两|三|四|五|六|七|八|九|十)(?:座|头|只|丛|群|个|把|位|条)/)?.[1];
       const count = number ? Number(number) || { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 }[number] : 1;
@@ -151,6 +151,14 @@ export function interpretCreation(raw, state) {
         const target = resolveMention(clause, workingState, current);
         if (target) operations.push(operation('follow', { target }));
         else issues.push('请先选中你希望同行的生物。');
+        continue;
+      }
+      const companion = clause.match(/^(?:让)?(.+?)(?:跟随|跟着|陪伴)(.+?)(?:一起游|游动|游)?$/);
+      if (companion) {
+        const target = resolveMention(companion[1], workingState, current);
+        const reference = resolveMention(companion[2], workingState, null);
+        if (!target || !reference) issues.push('请先创造双方，再说“让海龟跟随鲸鱼”。同类有多个时请使用物体编号。');
+        else operations.push(operation('follow', { target, reference }));
         continue;
       }
       const orbit = clause.match(/(.+?)(?:围绕|环绕|绕着|围着)(.+?)(?:游|盘旋|旋转|转|$)/);
@@ -216,6 +224,7 @@ function clearRelations(state) {
   for (const item of state.entities) {
     if (!valid.has(item.orbit)) item.orbit = null;
     if (!valid.has(item.resonance)) item.resonance = null;
+    if (!valid.has(item.leader)) item.leader = null;
   }
   if (!valid.has(state.selected)) state.selected = null;
   state.lastCreated = state.lastCreated.filter(id => valid.has(id));
@@ -306,7 +315,7 @@ export function executeCreation(previous, rawPlan, label = '语言造物') {
         if (!reference || targets.some(item => item.id === reference.id)) throw new Error('需要两个不同且存在的物体来建立关系。');
         if (action.kind === 'orbit') {
           if (targets.some(item => !LIVING_ASSETS.includes(item.asset)) || !['temple', 'arch', 'trident', 'coral', 'gate'].includes(reference.asset)) throw new Error('目前支持海洋生物环绕建筑或珊瑚。');
-          targets.forEach(item => { item.orbit = reference.id; item.following = false; });
+          targets.forEach(item => { item.orbit = reference.id; item.following = false; item.leader = null; });
           descriptions.push(`建立环绕关系 → ${ASSETS[reference.asset]}`);
         } else {
           if (targets.some(item => item.asset !== 'whale') || reference.asset !== 'coral') throw new Error('共鸣支持鲸鱼靠近珊瑚时，珊瑚自动发光。');
@@ -317,9 +326,15 @@ export function executeCreation(previous, rawPlan, label = '语言造物') {
       }
       if (action.kind === 'follow' || action.kind === 'release') {
         if (targets.some(item => !LIVING_ASSETS.includes(item.asset))) throw new Error('只有海洋生物能够跟随你游动。');
-        targets.forEach(item => { item.following = action.kind === 'follow'; item.orbit = null; });
+        const reference = action.kind === 'follow' && action.reference ? next.entities.find(item => item.id === resolveIds(action.reference, next)[0]) : null;
+        if (action.reference && (!reference || !LIVING_ASSETS.includes(reference.asset))) throw new Error('结伴的领航者必须是已创造的海洋生物。');
+        if (reference) for (const target of targets) {
+          const visited = new Set([target.id]); let current = reference;
+          while (current) { if (visited.has(current.id)) throw new Error('不能跟随自己或形成循环结伴。'); visited.add(current.id); current = next.entities.find(item => item.id === current.leader); }
+        }
+        targets.forEach(item => { item.following = action.kind === 'follow' && !reference; item.leader = reference?.id || null; item.orbit = null; });
         next.selected = targets.at(-1).id;
-        descriptions.push(action.kind === 'follow' ? '它将和你同行 · 移动镜头即可带它探索' : '已结束同行 · 留在此处自由游动');
+        descriptions.push(reference ? `结伴巡游 → ${ASSETS[reference.asset]} · 领航者移动时伙伴会跟上` : action.kind === 'follow' ? '它将和你同行 · 移动镜头即可带它探索' : '已结束同行 · 留在此处自由游动');
       }
       if (action.kind === 'delete') { next.entities = next.entities.filter(item => !ids.includes(item.id)); descriptions.push(`移除 ${targets.length} 个造物`); }
       if (action.kind === 'undo' && action.target) {
@@ -351,5 +366,6 @@ export function creationContext(state) {
   const valid = Array.isArray(state?.entities) ? state.entities.slice(0, 20).filter(item => /^form-\d{2,5}$/.test(item?.id) && Object.hasOwn(ASSETS, item?.asset)) : [];
   clean.entities = valid.map(item => ({ id: item.id, asset: item.asset, position: Array.isArray(item.position) && item.position.length === 3 ? item.position.map(value => Number.isFinite(value) ? value : 0) : [0, 0, 0], params: Object.fromEntries(properties.map(key => [key, key === 'color' ? Object.hasOwn(COLORS, item.params?.color) ? item.params.color : 'teal' : key === 'glow' ? item.params?.glow === true : Number.isFinite(item.params?.[key]) ? clamp(item.params[key], key === 'height' ? -10 : 0, key === 'height' ? 90 : 3) : defaults(item.asset)[key]])), orbit: valid.some(candidate => candidate.id === item.orbit) ? item.orbit : null, resonance: valid.some(candidate => candidate.id === item.resonance) ? item.resonance : null }));
   clean.entities.forEach((item, index) => { item.following = LIVING_ASSETS.includes(item.asset) && valid[index].following === true; });
+  clean.entities.forEach((item, index) => { item.leader = valid.some(candidate => candidate.id === valid[index].leader) ? valid[index].leader : null; });
   return { entities: clean.entities, selected: valid.some(item => item.id === state.selected) ? state.selected : null, lastCreated: Array.isArray(state?.lastCreated) ? state.lastCreated.filter(id => valid.some(item => item.id === id)) : [], lighting: ['sunlit', 'golden', 'moonlit'].includes(state?.lighting) ? state.lighting : 'sunlit' };
 }

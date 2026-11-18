@@ -21,6 +21,8 @@ import { createManta, createWhale, createJellies, createSchools } from './creatu
 import { buildBiomes } from './biomes.js';
 import { PLACES, REGIONS, EVENTS } from './world.js';
 import { clamp } from './core.js';
+import { Embodiment } from './embodiment.js';
+import { TidePlay } from './tide-play.js';
 
 class OceanOcclusionPass extends GTAOPass {
   render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
@@ -180,6 +182,13 @@ export class Ocean {
       const bounds = this.renderer.domElement.getBoundingClientRect();
       this.pointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
       this.raycaster.setFromCamera(this.pointer, this.camera);
+      const candidate = this.embodiment.pick(this.raycaster);
+      if (candidate) {
+        if (candidate.id) this.callbacks.onCreationSelect?.(candidate.id);
+        else if (!candidate.living) this.callbacks.onAnchor?.(candidate.point.toArray());
+        this.callbacks.onObjectInspect?.(candidate);
+        return;
+      }
       if (this.region === 'city') {
         const hits = this.raycaster.intersectObjects([...this.creationScene.objects.values()].map(entry => entry.root), true);
         if (hits.length) {
@@ -201,6 +210,8 @@ export class Ocean {
     });
     this.renderer.domElement.addEventListener('webglcontextlost', event => { event.preventDefault(); this.paused = true; this.callbacks.onError?.('图形上下文已中断，请刷新页面恢复。'); });
     this.lastFrame = performance.now();
+    this.embodiment = new Embodiment(this);
+    this.play = new TidePlay(this, callbacks.sound || { ritual() {}, note() {}, setIntensity() {}, stopChant() {} });
     this.lastUI = 0;
     this.frames = 0;
     this.frameStart = performance.now();
@@ -295,11 +306,7 @@ export class Ocean {
 
   jumpTo(landmark) {
     const displacement = new THREE.Vector3(...landmark.camera).sub(this.worldPosition());
-    for (const entry of this.creationScene.objects.values()) {
-      if (!entry.item.following) continue;
-      entry.followPosition ||= new THREE.Vector3(...entry.item.position);
-      entry.followPosition.add(displacement);
-    }
+    this.creationScene.displaceFollowing(displacement);
     this.restoreView({ position: landmark.camera, target: landmark.target });
     this.endless.update(this.worldPosition(), this.worldOffset, this.time, 'arrival');
     this.creationScene.update(0, this.reduced, { position: this.worldPosition(), forward: this.camera.getWorldDirection(new THREE.Vector3()) });
@@ -319,7 +326,7 @@ export class Ocean {
       this.camera.position.y += Math.sin(progress * Math.PI) * Math.min(22, this.travelDuration);
       this.controls.target.lerpVectors(this.travelOriginLook, this.travelLook, eased).sub(this.worldOffset);
       if (progress === 1) { this.travelTarget = null; this.callbacks.onTravelArrive?.(); }
-    } else {
+    } else if (!this.embodiment?.active) {
       if (this.cruising || this.movement.has('forward')) velocity.addScaledVector(forward, 30);
       if (this.movement.has('back')) velocity.addScaledVector(forward, -30);
       if (this.movement.has('left')) velocity.addScaledVector(right, -25);
@@ -341,7 +348,7 @@ export class Ocean {
     this.city.position.copy(this.worldOffset).multiplyScalar(-1);
     this.city.visible = Math.hypot(arrived.x, arrived.z + 100) < 820;
     this.creationScene.offset.copy(this.worldOffset);
-    for (const entry of this.creationScene.objects.values()) entry.root.visible = entry.item.following || new THREE.Vector3(...entry.item.position).distanceTo(arrived) < 900;
+    for (const entry of this.creationScene.objects.values()) entry.root.visible = entry.item.following || entry.followPosition.distanceTo(arrived) < 900;
     this.currentBiome = this.endless.update(this.worldPosition(), this.worldOffset, this.time);
     this.currentLandmark = localLandmark(arrived.toArray());
     this.landmarks.update(arrived, this.worldOffset, this.time, delta);
@@ -512,8 +519,13 @@ export class Ocean {
     this.uniforms.time.value = this.time;
     this.uniforms.night.value = THREE.MathUtils.damp(this.uniforms.night.value, this.night, 0.9, delta);
     const night = this.uniforms.night.value;
+    this.embodiment.beforeSimulation();
     this.updateTravel(delta);
-    const nocturne = this.currentLandmark?.nocturne ?? (this.currentLandmark?.id === 'choir' ? 1 : this.currentBiome?.id === 'garden' ? 0.55 : 0);
+    const ambientNocturne = this.currentLandmark?.nocturne ?? (this.currentLandmark?.id === 'choir' ? 1 : this.currentBiome?.id === 'garden' ? 0.55 : 0);
+    const ceremonyAge = this.play?.show ? this.time - this.play.show.start : -1;
+    const ceremonyFade = this.play?.show?.ending != null ? 1 - THREE.MathUtils.smoothstep(this.time - this.play.show.ending, 0, 2.5) : 1;
+    const ceremonyShade = ceremonyAge >= 0 ? THREE.MathUtils.smoothstep(ceremonyAge, 0, 5) * (1 - THREE.MathUtils.smoothstep(ceremonyAge, 28, 36)) * 0.86 * ceremonyFade : 0;
+    const nocturne = Math.max(ambientNocturne, ceremonyShade);
     const transition = this.instantLighting ? 1 : 1 - Math.exp(-realDelta * 0.7);
     this.instantLighting = false;
     this.sun.intensity = THREE.MathUtils.lerp(this.sun.intensity, (5.2 - nocturne * 3.4) * (1 - night * 0.84), transition);
@@ -560,7 +572,9 @@ export class Ocean {
         }
       }
     }
-    this.controls.update();
+    this.embodiment.update(delta);
+    this.play.update(delta);
+    if (!this.paused) this.controls.update(delta);
     this.renderer.info.reset();
     this.composer.render();
     this.frames++;

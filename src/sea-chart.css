@@ -1,0 +1,71 @@
+.mini-chart { position: absolute; left: 38px; bottom: 142px; width: 224px; z-index: 4; background: oklch(18% 0.025 182 / .91); border: 1px solid oklch(74% .047 99 / .4); border-radius: 4px; opacity: 0; }
+.is-ready .mini-chart { opacity: 1; }
+.chart-opener { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+.chart-opener > span { display: flex; align-items: center; gap: 8px; }
+.chart-opener svg { width: 17px; height: 17px; color: oklch(82% .07 88); }
+.chart-opener b { font-weight: 500; font-size: 11px; letter-spacing: 2px; }
+.chart-opener small { font-size: 10px; color: var(--muted); }
+.chart-opener i { font-size: 15px; font-style: normal; margin-left: 10px; }
+.mini-reading { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 12px; font-size: 9px; color: var(--muted); border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.mini-reading span:last-child { margin-left: auto; font-size: 9px; }
+.chart-viewport { position: relative; isolation: isolate; overflow: hidden; min-height: 0; background: radial-gradient(ellipse at 50% 50%, oklch(29% .033 175 / .65), oklch(16% .02 189)); touch-action: none; }
+#mini-viewport { height: 175px; }
+.chart-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.chart-contours path { fill: none; stroke: oklch(62% .055 164 / .35); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart-route, .chart-measure { fill: none; stroke: oklch(86% .08 84 / .72); stroke-width: 1; stroke-dasharray: 4 5; }
+.chart-measure { stroke: oklch(77% .04 167 / .62); stroke-dasharray: 2 6; }
+.chart-north { position: absolute; top: 12px; left: 12px; font-size: 10px; display: grid; justify-items: center; gap: 4px; color: oklch(85% .055 91); }
+.chart-north i { width: 1px; height: 13px; background: currentColor; }
+.chart-markers { position: absolute; inset: 0; pointer-events: none; }
+.chart-marker { position: absolute; transform: translate(-50%, -50%); padding: 5px; width: 36px; height: 36px; pointer-events: auto; border-radius: 50%; color: oklch(87% .032 116); background: oklch(19% .025 182 / .92); border: 1px solid oklch(75% .05 145 / .35); }
+.chart-marker svg { width: 100%; height: 100%; }
+.chart-marker span { position: absolute; top: calc(100% + 7px); left: 50%; transform: translateX(-50%); font-size: 11px; white-space: nowrap; padding: 2px 5px; background: oklch(19% .025 182 / .94); border-radius: 2px; }
+.chart-marker[aria-pressed='true'] { color: oklch(91% .085 88); border-color: currentColor; box-shadow: 0 0 0 4px oklch(82% .07 86 / .09); }
+.chart-marker.is-visited i { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: oklch(84% .09 162); bottom: 1px; right: 1px; }
+.chart-marker.at-edge { border-style: dashed; }
+.chart-marker.at-edge span { display: none; }
+#mini-viewport .chart-marker { width: 26px; height: 26px; padding: 4px; }
+#mini-viewport .chart-marker span { display: none; }
+.chart-player { position: absolute; width: 0; height: 0; z-index: 2; pointer-events: none; }
+.chart-player::before { content: ''; position: absolute; left: -28px; top: -38px; width: 56px; height: 42px; background: oklch(88% .05 126 / .1); clip-path: polygon(0 0,100% 0,50% 100%); }
+.chart-player span { display: block; width: 12px; height: 16px; transform: translate(-50%,-50%); clip-path: polygon(50% 0,100% 100%,50% 74%,0 100%); background: oklch(97% .025 100); filter: drop-shadow(0 0 3px oklch(10% .02 185)); }
+.chart-scale { position: absolute; bottom: 10px; left: 12px; display: grid; gap: 5px; font-size: 9px; color: var(--muted); pointer-events: none; }
+.chart-scale i { height: 4px; border: 1px solid currentColor; border-top: 0; }
+.sea-atlas.drawer { inset: 108px 32px 52px; width: auto; max-width: 1180px; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.chart-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 28px; border-bottom: 1px solid var(--line); }
+.chart-header .icon-button { font-size: 26px; }
+.chart-header h2 { margin: 12px 0 0; font-size: 26px; }
+.chart-workspace { display: grid; grid-template-columns: minmax(0,1fr) 280px; flex: 1; min-height: 0; }
+.chart-map-area { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+.chart-toolbar { display: flex; align-items: center; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.chart-toolbar button { min-width: 40px; min-height: 40px; font-size: 11px; padding: 8px 10px; }
+.chart-toolbar button[aria-pressed='true'] { background: oklch(82% .05 98 / .12); color: oklch(90% .07 89); }
+.chart-toolbar span { flex: 1; }
+#atlas-viewport { flex: 1; min-height: 240px; cursor: grab; }
+#atlas-viewport.dragging { cursor: grabbing; }
+.chart-footnote { display: flex; justify-content: space-between; padding: 13px 16px; color: var(--muted); font-size: 10px; border-top: 1px solid var(--line); }
+.chart-detail { padding: 26px 24px; overflow-y: auto; }
+.chart-site-icon svg { width: 40px; height: 40px; color: oklch(84% .075 83); margin-bottom: 20px; }
+.chart-detail h3 { font-family: var(--serif); font-size: 28px; font-weight: 400; letter-spacing: 3px; margin: 12px 0; }
+.chart-detail > p { font-size: 12px; color: var(--muted); line-height: 1.9; }
+.chart-distance { display: grid; gap: 8px; margin: 28px 0 24px; font-variant-numeric: tabular-nums; }
+.chart-distance strong { font-size: 28px; font-weight: 400; }
+.chart-distance span, #chart-navigation-note { font-size: 10px; color: var(--muted); }
+.chart-travel { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chart-travel button { min-height: 44px; padding: 10px 12px; font-size: 11px; }
+.chart-ruler { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 22px; display: grid; gap: 14px; font-size: 11px; }
+.chart-ruler > div { display: flex; align-items: center; gap: 5px; }
+.chart-ruler select { min-width: 0; width: 44%; padding: 8px 3px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); font-size: 11px; }
+.chart-ruler output { font-size: 22px; color: oklch(88% .07 88); }
+.chart-ruler small { color: var(--muted); font-size: 9px; line-height: 1.8; }
+#chart-guide { margin-top: 12px; padding-left: 0; }
+.immersive .mini-chart, .panel-open .mini-chart { display: none; }
+@media (max-width: 700px) {
+  .has-explored #mini-viewport { display: block; height: 106px; }
+  #mini-viewport .chart-marker span { display: none; }
+  .is-embodied .mini-chart { top: auto; bottom: 225px; width: 136px; }
+  .embodied-chat .mini-chart { display: none; }
+}
+@media (max-width: 1250px) and (min-width: 701px) { .mini-chart { left: 25px; width: 194px; bottom: 137px; } #mini-viewport { height: 153px; } .conversation { width: min(660px, 52vw); } .mini-reading { padding-inline: 8px; gap: 4px; } .sea-atlas.drawer { inset-inline: 24px; } }
+@media (max-width: 700px) { .mini-chart { top: 116px; bottom: auto; left: 20px; width: 143px; border: 0; background: oklch(18% .025 182 / .75); } .chart-opener { padding: 0 8px; border-bottom: 0; } .chart-opener small { font-size: 0; } .chart-opener i { font-size: 17px; margin-left: 0; } #mini-viewport, .mini-reading { display: none; } .world-title { top: 171px; } .sea-atlas.drawer { inset: 76px 12px 30px; overflow-y: auto; } .chart-header { padding: 18px 16px; } .chart-header h2 { font-size: 23px; margin-top: 8px; } .chart-header .eyebrow { font-size: 6px; letter-spacing: 1.3px; } .chart-workspace { display: flex; flex-direction: column; flex: none; } .chart-map-area { border-right: 0; } #atlas-viewport { height: 330px; min-height: 330px; flex: none; } .chart-detail { padding: 20px; overflow: visible; } .chart-site-icon { float: right; } .chart-detail h3 { font-size: 25px; } .chart-distance { margin: 14px 0; } .chart-distance strong { font-size: 23px; } .chart-ruler { margin-top: 18px; padding-top: 18px; } .chart-footnote { font-size: 9px; padding-inline: 10px; } .chart-toolbar { padding-inline: 6px; } .chart-toolbar button { padding-inline: 8px; } #atlas-viewport .chart-marker { width: 34px; height: 34px; } #atlas-viewport .chart-marker span { font-size: 10px; top: calc(100% + 3px); } }
+@media (max-height: 700px) and (min-width: 701px) { .mini-chart { bottom: 118px; width: 182px; } #mini-viewport { height: 130px; } .sea-atlas.drawer { top: 85px; bottom: 40px; } .chart-header { padding: 16px 24px; } .chart-detail { padding: 18px; } }

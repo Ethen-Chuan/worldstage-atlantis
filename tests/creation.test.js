@@ -113,6 +113,6 @@ test('repeated object-specific undo walks backward instead of toggling the last 
   state = say(state, '只撤销鲸鱼修改').state;
   assert.deepEqual(state.entities.at(-1), scaled);
   state = say(state, '只撤销鲸鱼修改').state;
-  assert.equal(state.entities.at(-1).params.scale, 0.75);
+  assert.equal(state.entities.at(-1).params.scale, initialCreation().entities.at(-1).params.scale);
   assert.equal(say(state, '只撤销鲸鱼修改').changed, false);
 });

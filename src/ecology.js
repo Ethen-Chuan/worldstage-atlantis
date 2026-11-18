@@ -5,6 +5,7 @@ import { seaHeight, worldHash, biomeAt } from './terrain.js';
 import { localLandmark } from './landmarks.js';
 import { createAncientFish, createTurtle, createNautilus, createMermaid } from './mythic-creatures.js';
 import { dampAngle } from './swim.js';
+import { createShark } from './shark.js';
 
 const REEF_COLORS = ['#be795b', '#d3a777', '#9c7891', '#7a9c91', '#c299a3'];
 const CELL = 180;
@@ -171,6 +172,7 @@ function schools(time) {
     material.customProgramCacheKey = () => `reef-fish-${kind}-v5`;
     const count = kind === 0 ? 300 : kind === 1 ? 65 : 200;
     const mesh = new THREE.InstancedMesh(schoolGeometry(kind), material, count); mesh.frustumCulled = false; mesh.userData.noAO = true; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.userData.creature = 'shoal';
     const members = Array.from({ length: count }, (_, index) => ({ phase: random() * Math.PI * 2, radius: 6 + random() * 15, height: (random() - 0.5) * 12, group: index % 4, size: kind === 1 ? 0.65 + random() * 0.7 : 0.32 + random() * 0.58 }));
     mesh.geometry.setAttribute('schoolPhase', new THREE.InstancedBufferAttribute(new Float32Array(members.map(fish => fish.phase)), 1));
     meshes.push(mesh); paths.push(members); root.add(mesh);
@@ -215,6 +217,7 @@ export class OceanEcology {
     this.schools = schools(this.time); this.root.add(this.schools.root);
     this.ancient = createAncientFish(); this.ancient.root.scale.setScalar(1.85); this.ancient.root.rotation.y = -Math.PI / 2; this.root.add(this.ancient.root);
     this.animals = [];
+    for (let index = 0; index < 3; index++) this.animals.push({ ...createShark(), kind: 'shark', index });
     for (let index = 0; index < 4; index++) this.animals.push({ ...createTurtle(), kind: 'turtle', index });
     for (let index = 0; index < 6; index++) this.animals.push({ ...createNautilus(), kind: 'nautilus', index });
     this.animals.push({ ...createMermaid(), kind: 'mermaid', index: 0 });
@@ -262,9 +265,13 @@ export class OceanEcology {
     if (delta > 0) this.ancient.animate(time);
     for (const animal of this.animals) {
       const { root, kind, index } = animal;
-      root.visible = kind === 'mermaid' ? this.activeHabitat === 'palace' : kind === 'turtle' ? !nocturnal : true;
+      root.visible = kind === 'mermaid' ? this.activeHabitat === 'palace' : ['turtle', 'shark'].includes(kind) ? !nocturnal : true;
       const phase = time * (kind === 'turtle' ? 0.085 : 0.035) + index * 1.7;
-      if (kind === 'turtle') {
+      if (kind === 'shark') {
+        const orbit = time * 0.045 + index * 2.1;
+        root.position.set(centerX + Math.cos(orbit) * 75, floor + 26 + index * 8, centerZ + Math.sin(orbit) * 55);
+        root.rotation.set(0.02, Math.atan2(75 * Math.sin(orbit), -55 * Math.cos(orbit)), Math.sin(orbit) * 0.035);
+      } else if (kind === 'turtle') {
         root.position.set(centerX - 34 + Math.cos(phase) * (34 + index * 4), floor + 15 + index * 9 + Math.sin(phase * 1.7) * 2, centerZ + 24 + Math.sin(phase) * 36);
         root.rotation.set(0.04, Math.atan2(Math.sin(phase) * (34 + index * 4), -Math.cos(phase) * 36), Math.sin(phase) * 0.07); root.scale.setScalar(1.2 + index * 0.12);
       } else if (kind === 'nautilus') {
@@ -279,6 +286,6 @@ export class OceanEcology {
   }
 
   inspect() {
-    return { habitat: this.activeHabitat, patches: this.patches.size, pooled: this.pool.length, schoolingFish: this.schools.count, species: ['装甲古鱼（幻想）', '海龟', '鹦鹉螺', '礁鱼', '蝶鱼', '拟花鲈', '海星', '神话人鱼'], time: this.lastTime, ancient: { visible: this.ancient.root.visible, position: this.ancient.root.position.toArray() }, animals: this.animals.filter(animal => animal.root.visible).map(animal => ({ kind: animal.kind, position: animal.root.position.toArray() })), reactions: ['camera-avoidance', 'giant-fish-avoidance'] };
+    return { habitat: this.activeHabitat, patches: this.patches.size, pooled: this.pool.length, schoolingFish: this.schools.count, species: ['装甲古鱼（幻想）', '灰礁鲨', '海龟', '鹦鹉螺', '礁鱼', '蝶鱼', '拟花鲈', '海星', '神话人鱼'], time: this.lastTime, ancient: { visible: this.ancient.root.visible, position: this.ancient.root.position.toArray() }, animals: this.animals.filter(animal => animal.root.visible).map(animal => ({ kind: animal.kind, position: animal.root.position.toArray() })), reactions: ['camera-avoidance', 'giant-fish-avoidance'] };
   }
 }

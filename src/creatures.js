@@ -42,13 +42,16 @@ function mergeStaticParts(group, excluded = []) {
 
 export function createManta() {
   const root = new THREE.Group();
-  const top = new THREE.MeshStandardMaterial({ color: '#294e60', roughness: 0.54, metalness: 0.28, side: THREE.DoubleSide });
+  const top = new THREE.MeshStandardMaterial({ color: '#243836', roughness: 0.62, metalness: 0, side: THREE.DoubleSide });
   const belly = new THREE.MeshStandardMaterial({ color: '#bbc5b2', roughness: 0.78, side: THREE.DoubleSide });
-  const edge = new THREE.MeshStandardMaterial({ color: '#738d8b', roughness: 0.48, metalness: 0.15 });
+  const edge = new THREE.MeshStandardMaterial({ color: '#435652', roughness: 0.62, metalness: 0 });
   const dark = new THREE.MeshStandardMaterial({ color: '#10272d', roughness: 0.2 });
-  const eye = new THREE.MeshStandardMaterial({ color: '#d4bc75', emissive: '#b2c195', emissiveIntensity: 0.25, roughness: 0.2 });
-  root.add(mesh(new THREE.SphereGeometry(1, 32, 24), top, [0, 0, 0], [1.42, 0.55, 2.6]));
-  root.add(mesh(new THREE.SphereGeometry(1, 24, 16), belly, [0, -0.25, -0.1], [1.25, 0.32, 2.27]));
+  const eye = new THREE.MeshStandardMaterial({ color: '#172724', roughness: 0.16 });
+  eye.userData.keepColor = true;
+  root.add(mesh(new THREE.SphereGeometry(1, 32, 24), top, [0, 0, 0], [1.42, 0.38, 2.6]));
+  root.add(mesh(new THREE.SphereGeometry(1, 24, 16), belly, [0, -0.2, -0.1], [1.25, 0.23, 2.27]));
+  const mouth = new THREE.CatmullRomCurve3([new THREE.Vector3(-0.85, -0.08, -2.24), new THREE.Vector3(0, -0.13, -2.57), new THREE.Vector3(0.85, -0.08, -2.24)]);
+  root.add(mesh(new THREE.TubeGeometry(mouth, 24, 0.045, 6), dark));
   const wingGeometry = new THREE.PlaneGeometry(2, 1, 48, 12);
   const wingPosition = wingGeometry.attributes.position;
   const base = [];
@@ -57,8 +60,8 @@ export function createManta() {
     const chord = wingPosition.getY(index) + 0.5;
     const outer = Math.abs(span);
     const horizontal = span * 7.7;
-    const front = -2.3 + outer * 3.3;
-    const back = 2.6 - outer * 1.65;
+    const front = -2.3 + Math.pow(outer, 1.28) * 3.5;
+    const back = 1.2 + Math.pow(1 - outer, 0.78) * 1.4;
     const depth = front + chord * (back - front);
     const elevation = Math.sin(outer * Math.PI) * 0.1;
     wingPosition.setXYZ(index, horizontal, elevation, depth);
@@ -71,8 +74,8 @@ export function createManta() {
   for (let side = -1; side <= 1; side += 2) {
     const hornCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(side * 0.85, 0.1, -1.9), new THREE.Vector3(side * 1.15, 0.05, -2.7), new THREE.Vector3(side * 0.9, -0.1, -3.25)]);
     root.add(mesh(new THREE.TubeGeometry(hornCurve, 16, 0.23, 8, false), edge));
-    root.add(mesh(new THREE.SphereGeometry(0.15, 12, 8), eye, [side * 1.3, 0.19, -1.65]));
-    root.add(mesh(new THREE.SphereGeometry(0.07, 10, 8), dark, [side * 1.39, 0.2, -1.69]));
+    root.add(mesh(new THREE.SphereGeometry(0.11, 12, 8), eye, [side * 1.3, 0.13, -1.65]));
+    root.add(mesh(new THREE.SphereGeometry(0.045, 10, 8), dark, [side * 1.39, 0.14, -1.69]));
     for (let index = 0; index < 5; index++) {
       const gill = mesh(new THREE.TorusGeometry(0.45, 0.018, 4, 12, Math.PI * 0.6), dark, [side * 0.4, -0.53, -1 + index * 0.32]);
       gill.rotation.x = Math.PI / 2;
@@ -87,8 +90,8 @@ export function createManta() {
   for (let index = 0; index < 55; index++) {
     const horizontal = (random() - 0.5) * 2.3;
     const depth = (random() - 0.5) * 3.8;
-    const elevation = Math.sqrt(Math.max(0.1, 1 - horizontal * horizontal / 2.1 - depth * depth / 7)) * 0.57;
-    markings.add(mesh(new THREE.SphereGeometry(0.035 + random() * 0.065, 6, 4), edge, [horizontal, elevation, depth], [1, 0.2, 1.5]));
+    const elevation = -0.2 - Math.sqrt(Math.max(0.1, 1 - horizontal * horizontal / 1.6 - depth * depth / 5.2)) * 0.235;
+    markings.add(mesh(new THREE.SphereGeometry(0.025 + random() * 0.045, 6, 4), dark, [horizontal, elevation, depth], [1, 0.12, 1.5]));
   }
   root.add(markings);
   mergeStaticParts(markings);
@@ -116,18 +119,20 @@ export function createManta() {
 
 export function createWhale() {
   const root = new THREE.Group();
-  const material = organicSurface(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.48, metalness: 0.09 }), 'whale', { relief: 0.085 });
-  const finMaterial = organicSurface(new THREE.MeshStandardMaterial({ color: '#64858d', roughness: 0.5, metalness: 0.08, side: THREE.DoubleSide }), 'whale', { relief: 0.035, length: 16 });
+  const material = organicSurface(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.54, metalness: 0, clearcoat: 0.16, clearcoatRoughness: 0.38 }), 'whale', { relief: 0.038 });
+  const finMaterial = organicSurface(new THREE.MeshStandardMaterial({ color: '#a6b0a5', roughness: 0.58, metalness: 0, side: THREE.DoubleSide }), 'whale', { relief: 0.024, length: 16 });
   const throatMaterial = new THREE.MeshStandardMaterial({ color: '#79958f', roughness: 0.75 });
   const eyeMaterial = new THREE.MeshStandardMaterial({ color: '#152b30', roughness: 0.1 });
   eyeMaterial.userData.keepColor = true;
   const colors = [];
-  const upperColor = new THREE.Color('#365862');
+  const upperColor = new THREE.Color('#334441');
   const lowerColor = new THREE.Color('#c4c8ae');
-  const body = smoothBody([[-15, 0.06], [-14.15, 1.65], [-12, 2.95], [-8, 3.7], [-3, 3.8], [2, 3.2], [7, 2.18], [11, 1.35], [15, 0.66], [18, 0.14]], 104, 48, 0.85);
+  const body = smoothBody([[-15.4, 0.12], [-15, 1.35], [-13.8, 2.18], [-11, 2.85], [-7, 3.4], [-2, 3.55], [3, 2.9], [8, 1.9], [12, 1.04], [16, 0.46], [18, 0.16]], 128, 64, 0.79);
   for (let index = 0; index < body.attributes.position.count; index++) {
     const vertical = body.attributes.position.getY(index);
-    const shade = upperColor.clone().lerp(lowerColor, THREE.MathUtils.smoothstep(-vertical, -0.1, 2.7));
+    const depth = body.attributes.position.getZ(index);
+    const irregular = Math.sin(depth * 0.76) * 0.28 + Math.cos(body.attributes.position.getX(index) * 1.4 + depth) * 0.14;
+    const shade = upperColor.clone().lerp(lowerColor, THREE.MathUtils.smoothstep(-vertical + irregular, 0.7, 2.55));
     colors.push(shade.r, shade.g, shade.b);
   }
   body.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -136,7 +141,8 @@ export function createWhale() {
   for (let index = 0; index < 17; index++) {
     const depth = -13.2 + index % 6 * 1.05;
     const angle = (index % 3 - 1) * 0.72;
-    root.add(mesh(new THREE.SphereGeometry(0.13 + index % 3 * 0.035, 8, 6), tubercleMaterial, [Math.sin(angle) * 2.9, Math.cos(angle) * 2.8, depth], [1, 0.5, 1.35]));
+    const radius = 2.3 + (depth + 13.2) * 0.14;
+    root.add(mesh(new THREE.SphereGeometry(0.1 + index % 3 * 0.025, 12, 8), tubercleMaterial, [Math.sin(angle) * radius, Math.cos(angle) * radius * 0.79, depth], [1, 0.48, 1.35]));
   }
   const fins = [];
   for (let side = -1; side <= 1; side += 2) {
@@ -146,8 +152,8 @@ export function createWhale() {
     flipper.rotation.z = side * -0.6;
     root.add(flipper);
     fins.push(flipper);
-    root.add(mesh(new THREE.SphereGeometry(0.24, 20, 14), eyeMaterial, [side * 3.47, 0.33, -10.0]));
-    root.add(mesh(new THREE.SphereGeometry(0.055, 10, 8), throatMaterial, [side * 3.67, 0.39, -10.06]));
+    root.add(mesh(new THREE.SphereGeometry(0.16, 24, 16), eyeMaterial, [side * 3.01, 0.12, -10.0]));
+    root.add(mesh(new THREE.SphereGeometry(0.028, 10, 8), throatMaterial, [side * 3.15, 0.16, -10.06]));
     const lipPoints = [new THREE.Vector3(side * 0.55, -0.3, -14.6), new THREE.Vector3(side * 2.78, -0.85, -12), new THREE.Vector3(side * 3.57, -1.0, -8.5)];
     root.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lipPoints), 24, 0.055, 6, false), eyeMaterial));
   }

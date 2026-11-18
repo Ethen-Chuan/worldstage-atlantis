@@ -78,6 +78,7 @@ function fishVortex(materials) {
   const material = new THREE.MeshStandardMaterial({ color: '#dde3ca', emissive: '#4a8f92', emissiveIntensity: 0.75, roughness: 0.3, metalness: 0.6 });
   const count = 1500;
   const fish = new THREE.InstancedMesh(geometry, material, count); fish.instanceMatrix.setUsage(THREE.DynamicDrawUsage); fish.frustumCulled = false;
+  fish.userData.creature = 'shoal';
   const random = seededRandom(957);
   const paths = Array.from({ length: count }, () => ({ angle: random() * Math.PI * 2, layer: random(), depth: random() - 0.5, speed: 0.065 + random() * 0.035, scale: 0.55 + random() * 0.9 }));
   const gold = new THREE.Color('#edc36e'); const blue = new THREE.Color('#53b7c9');
@@ -293,7 +294,7 @@ export class WonderScene {
       entry.root.visible = distance < 850;
       if (!entry.root.visible) continue;
       entry.proximity = THREE.MathUtils.damp(entry.proximity, 1 - THREE.MathUtils.smoothstep(distance, 85, 250), 0.65, delta);
-      entry.energy = Math.min(1, entry.proximity * 0.28 + wonderEnvelope(time - entry.pulseStart));
+      entry.energy = THREE.MathUtils.damp(entry.energy, Math.min(1, entry.proximity * 0.28 + wonderEnvelope(time - entry.pulseStart)), 2, delta);
       entry.animate(time, delta, entry.energy);
     }
   }
