@@ -4,6 +4,8 @@
 
 **一座可以用语言创造、修改与探索的神话海底世界。**
 
+[进入即境](https://worldstage-atlantis.vercel.app/) · [直达星海之眼](https://worldstage-atlantis.vercel.app/?scene=vortex)
+
 巨鲸穿过星海的瞳孔，光沿珊瑚的脉络流动，远古鱼群从沉没的柱廊间经过。你不只是观看者：创造一只海龟，让它与你同行；再改一改颜色、速度或尺度。世界保留对象的身份，也允许你反悔。
 
 ![即境：真实运行的海底圣城](public/gallery/cover.webp)
@@ -74,7 +76,7 @@
 
 ## 本地运行
 
-需要 Node.js 20.19+；发布验收同时使用了 Node.js 24 环境。
+使用 Node.js 24.x；本地验收、工作流模板与 Vercel 构建固定在同一主版本。
 
 ```bash
 npm ci
@@ -95,6 +97,8 @@ npm run textures
 ## 部署与安全边界
 
 `npm run build:public` 和 `vercel.json` 使用 Vite 静态构建，只发布 `dist/`，也支持子目录静态托管。公开站点的语言与视频配置显式禁用；本地 `server.js` 中的模型代理不会成为公开 API。私人环境文件、聊天记录与参考图不进入仓库或部署包。
+
+Vercel 项目已关联本仓库的 `main` 分支。推送后由 Git 集成构建和发布，不依赖 GitHub Actions 的工作流写入权限。部署状态与验收边界见 [发布说明](发布说明.md)。
 
 实际产品边界：最多 20 个可编辑造物；不是物理生态模拟、任意形态生成器或科学复原。装甲古鱼和人鱼为幻想设计。当前未集成 World Model 或高斯泼溅，不将接口适配宣称为模型实测。
 
