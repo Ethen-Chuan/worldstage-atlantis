@@ -1,0 +1,12 @@
+.git
+.github
+.vercel
+.impeccable.md
+node_modules
+dist
+.env*
+work
+tests
+*.command
+*.log
+.DS_Store
