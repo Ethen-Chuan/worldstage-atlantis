@@ -61,9 +61,9 @@ test('summoning accepts only supported complete phrases, not negative or mixed c
   for (const text of ['不要唤醒回声天门', '唤醒回声天门，召唤龙虾', '唤醒星海之眼，然后删除鲸鱼', '唤醒回声天门，召唤鲸鱼并删除一切']) assert.equal(ritualRequest(text), null);
 });
 
-test('festival has build-up, layered blooms, a finale and a bounded afterglow', () => {
+test('environment response has a gentle onset, layered light and a bounded fade', () => {
   assert.equal(festivalStage(-1).strength, 0); assert.equal(festivalStage(0).strength, 0);
-  assert.equal(festivalStage(24).name, '星海齐鸣'); assert.equal(festivalStage(24).strength, 1);
+  assert.equal(festivalStage(24).name, '层层潮光'); assert.equal(festivalStage(24).strength, 1);
   assert.ok(festivalStage(35).strength < festivalStage(32).strength); assert.equal(festivalStage(36).strength, 0);
   assert.equal(festivalStage(Infinity).strength, 0);
 });

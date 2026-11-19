@@ -1,5 +1,6 @@
 import { Orchestra } from './orchestra.js';
 import { scoreFor } from './orchestra-score.js';
+import { CreatureAudio } from './creature-audio.js';
 
 export class OceanSound {
   constructor() {
@@ -8,6 +9,7 @@ export class OceanSound {
     this.context = null;
     this.master = null;
     this.voices = new Set();
+    this.creatureAudio = new CreatureAudio(this);
     this.site = 'palace'; this.intensity = 0; this.narration = false; this.userMuted = false; this.unlocked = false; this.trial = false;
     this.levels = { music: 0.8, ambience: 0.22, effects: 0.65 }; this.onChange = () => {};
     try { this.userMuted = localStorage.getItem('worldstage-muted') === 'true'; } catch {}
@@ -15,7 +17,7 @@ export class OceanSound {
 
   async toggle() {
     if (this.enabled && this.context?.state === 'running' && this.orchestra?.status !== 'error') {
-      this.enabled = false; this.userMuted = true; this.stopChant();
+      this.enabled = false; this.userMuted = true; this.stopChant(); this.creatureAudio.stop();
       this.master.gain.setTargetAtTime(0, this.context.currentTime, 0.15);
       try { localStorage.setItem('worldstage-muted', 'true'); } catch {}
       this.onChange(); return false;
@@ -32,6 +34,7 @@ export class OceanSound {
     if (this.userMuted || document.hidden) return false;
     this.enabled = true; this.unlocked = true;
     this.master.gain.setTargetAtTime(0.85, this.context.currentTime, 0.3); this.onChange();
+    void this.creatureAudio.prepare();
     try { await this.orchestra.load(); if (this.enabled) { this.orchestra.setScene(this.site); this.orchestra.setIntensity(this.intensity, this.trial, this.paused); } }
     catch { this.onChange(); }
     return true;
@@ -75,7 +78,7 @@ export class OceanSound {
     this.setScene(this.site);
     this.context.addEventListener('statechange', () => this.onChange());
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) { this.stopChant(); this.context.suspend().catch(() => {}); }
+      if (document.hidden) { this.stopChant(); this.creatureAudio.stop(); this.context.suspend().catch(() => {}); }
       else if (this.enabled) this.context.resume().catch(() => this.onChange());
     });
   }
@@ -84,7 +87,7 @@ export class OceanSound {
     if (this.paused === paused) return;
     this.paused = paused;
     if (!this.context) return;
-    if (paused) this.stopChant();
+    if (paused) { this.stopChant(); this.stopWhaleCall(); this.creatureAudio.stop(); }
     this.orchestra.setIntensity(this.intensity, this.trial, paused);
     this.musicGain.gain.setTargetAtTime(this.levels.music * (paused ? 0.65 : 1), this.context.currentTime, 1);
     this.onChange();
@@ -109,15 +112,19 @@ export class OceanSound {
 
   setTrial(active) { this.trial = active; this.orchestra?.setIntensity(this.intensity, active, this.paused); this.onChange(); }
 
+  whaleCall(options = {}) { return this.creatureAudio.whale(options); }
+  stopWhaleCall() { this.creatureAudio.stopWhale(); }
+
   setLevel(channel, value) {
     if (!(channel in this.levels) || !Number.isFinite(value)) return;
     this.levels[channel] = Math.max(0, Math.min(1, value));
     this[`${channel}Gain`]?.gain.setTargetAtTime(this.levels[channel] * (channel === 'music' && this.paused ? 0.65 : 1), this.context.currentTime, 0.2); this.onChange();
+    if (channel === 'music') this.creatureAudio.restoreMusic();
   }
 
   inspect() {
     let peak = 0; if (this.analyser) { this.analyser.getFloatTimeDomainData(this.meter); for (const value of this.meter) peak = Math.max(peak, Math.abs(value)); }
-    return { enabled: this.enabled, unlocked: this.unlocked, userMuted: this.userMuted, context: this.context?.state || 'locked', site: this.site, intensity: this.intensity, narration: this.narration, paused: this.paused, levels: { ...this.levels }, peak: Number(peak.toFixed(5)), orchestra: this.orchestra?.inspect() || { status: 'idle' } };
+    return { enabled: this.enabled, unlocked: this.unlocked, userMuted: this.userMuted, context: this.context?.state || 'locked', site: this.site, intensity: this.intensity, narration: this.narration, paused: this.paused, levels: { ...this.levels }, peak: Number(peak.toFixed(5)), orchestra: this.orchestra?.inspect() || { status: 'idle' }, creatureAudio: this.creatureAudio.inspect() };
   }
 
   note(midi, duration = 4, type = 'bell', volume = 0.05) {
@@ -161,6 +168,8 @@ export class OceanSound {
 
   voice(creature, singing = false) {
     if (!this.enabled || !this.context) return;
+    if (creature === 'whale') return this.whaleCall({ distance: 65 });
+    if (creature === 'mermaid') return;
     const start = this.context.currentTime;
     const notes = singing ? [0, 1.5, 3.6] : [0];
     notes.forEach((offset, index) => {

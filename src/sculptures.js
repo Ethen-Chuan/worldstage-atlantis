@@ -8,6 +8,7 @@ export class StoneWorkshop {
     this.materials = materials;
     this.random = seededRandom(seed);
     this.parts = new Map();
+    this.colliders = [];
     this.matrix = new THREE.Object3D();
     this.geometry = {
       box: new RoundedBoxGeometry(1, 1, 1, 1, 0.035),
@@ -49,6 +50,11 @@ export class StoneWorkshop {
     this.matrix.rotation.set(...rotation);
     this.matrix.updateMatrix();
     const transformed = geometry.clone().applyMatrix4(this.matrix.matrix);
+    if (!['gold', 'glow', 'kelp', 'kelpDark', 'coral', 'coralRose', 'coralLight'].includes(material)) {
+      transformed.computeBoundingBox();
+      const size = transformed.boundingBox.getSize(new THREE.Vector3());
+      if (Math.min(size.x, size.y, size.z) > 0.45) this.colliders.push({ min: transformed.boundingBox.min.toArray(), max: transformed.boundingBox.max.toArray() });
+    }
     const flat = transformed.index ? transformed.toNonIndexed() : transformed;
     if (flat !== transformed) transformed.dispose();
     for (const key of Object.keys(flat.attributes)) if (!['position', 'normal', 'uv'].includes(key)) flat.deleteAttribute(key);
@@ -154,6 +160,7 @@ export class StoneWorkshop {
   finish(name = 'sculpture') {
     const group = new THREE.Group();
     group.name = name;
+    group.userData.collisionBoxes = this.colliders;
     for (const [name, parts] of this.parts) {
       const combined = mergeGeometries(parts);
       const mesh = new THREE.Mesh(combined, this.materials[name]);

@@ -176,11 +176,11 @@ export class CreationScene {
       let heading = shape.rotation.y;
       if (living) {
         const phase = Number(item.id.slice(5));
-        destination.y += (Math.sin(entry.clock * 0.37 + phase) - Math.sin(entry.roamStart * 0.37 + phase)) * (item.asset === 'whale' ? 1.8 : 0.6);
-        const roam = item.preset && item.asset === 'whale' ? 27 : item.asset === 'manta' ? 9 : 5;
+        destination.y += (Math.sin(entry.clock * 0.37 + phase) - Math.sin(entry.roamStart * 0.37 + phase)) * (item.asset === 'mermaid' ? 3.4 : item.asset === 'whale' ? 1.8 : 0.6);
+        const roam = item.preset && item.asset === 'whale' ? 27 : item.asset === 'mermaid' ? 15 : item.asset === 'manta' ? 9 : 5;
         destination.x += (Math.sin(entry.clock * 0.11) - Math.sin(entry.roamStart * 0.11)) * roam;
         destination.z += (Math.cos(entry.clock * 0.11) - Math.cos(entry.roamStart * 0.11)) * roam * 0.4;
-        heading = item.asset === 'mermaid' ? Math.PI : Math.atan2(-Math.cos(entry.clock * 0.11), Math.sin(entry.clock * 0.11) * 0.4);
+        heading = Math.atan2(-Math.cos(entry.clock * 0.11), Math.sin(entry.clock * 0.11) * 0.4);
       }
       if (item.following && viewpoint) {
         const distance = ['whale', 'ancient'].includes(item.asset) ? 48 : 27;
@@ -211,7 +211,7 @@ export class CreationScene {
           shape.rotation.y = dampAngle(shape.rotation.y, heading, ['whale', 'ancient'].includes(item.asset) ? 1.15 : 1.8, delta);
           const banking = THREE.MathUtils.clamp(-difference * 0.12, -0.14, 0.14);
           shape.rotation.z = THREE.MathUtils.damp(shape.rotation.z, banking, 1.5, delta);
-          const pitch = item.asset === 'mermaid' ? 0 : THREE.MathUtils.clamp(Math.atan2(entry.velocity.y, Math.hypot(entry.velocity.x, entry.velocity.z) + 0.2), -0.16, 0.16);
+          const pitch = item.asset === 'mermaid' ? -0.16 + Math.sin(entry.clock * 0.27) * 0.1 : THREE.MathUtils.clamp(Math.atan2(entry.velocity.y, Math.hypot(entry.velocity.x, entry.velocity.z) + 0.2), -0.16, 0.16);
           shape.rotation.x = THREE.MathUtils.damp(shape.rotation.x, pitch, 1.25, delta);
         }
       } else root.position.copy(destination).sub(this.offset);
@@ -240,7 +240,7 @@ export class CreationScene {
         material.emissiveIntensity = material.userData.baseIntensity + intensity;
       }
     }
-    this.selection.visible = Boolean(this.selected && this.objects.get(this.selected)?.root.visible);
+    this.selection.visible = Boolean(this.selected && this.objects.get(this.selected)?.root.visible && !LIVING_ASSETS.includes(this.objects.get(this.selected)?.item.asset));
     if (this.selection.visible) {
       const entry = this.objects.get(this.selected);
       this.selection.position.copy(entry.root.position);

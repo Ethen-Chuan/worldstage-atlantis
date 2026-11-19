@@ -1,7 +1,7 @@
 import { LANDMARKS, ECOLOGY_VIEWS } from './landmarks.js';
 import { validateCreationPlan } from './creation.js';
 
-const commands = new Set(['creation', 'travel', 'ritual', 'calm', 'trial', 'talk', 'inhabit', 'release-view', 'switch-view', 'cruise']);
+const commands = new Set(['creation', 'travel', 'ritual', 'calm', 'trial', 'talk', 'sing', 'inhabit', 'release-view', 'switch-view', 'cruise', 'whale-fall']);
 const speciesNames = { 鲸鱼: 'whale', 鲨鱼: 'shark', 灰礁鲨: 'shark', 海龟: 'turtle', 蝠鲼: 'manta', 美人鱼: 'mermaid', 人鱼: 'mermaid', 水母: 'jelly', 鱼群: 'shoal', 装甲古鱼: 'ancient', 古鱼: 'ancient', 鹦鹉螺: 'nautilus' };
 const summonNames = ['鲸鱼', '鲨鱼', '灰礁鲨', '蝠鲼', '海龟', '水母', '鱼群'];
 const destinations = [...LANDMARKS, ...ECOLOGY_VIEWS];
@@ -9,6 +9,9 @@ const destinations = [...LANDMARKS, ...ECOLOGY_VIEWS];
 export function planWorld(text, context = {}) {
   const input = String(text).trim();
   if (!input || /^(?:不要|别|不许|禁止)/.test(input)) return null;
+  if (/^(?:请|让)?(?:美人鱼|人鱼)(?:唱歌|唱一首歌|唱一段歌)[。！!]*$/.test(input)) return worldAction('sing', { species: 'mermaid' });
+  if (/^(?:观看|看一场|开始)鲸落(?:叙事)?[。！!]*$/.test(input)) return worldAction('whale-fall', { enabled: true });
+  if (/^结束鲸落(?:叙事)?[。！!]*$/.test(input)) return worldAction('whale-fall', { enabled: false });
   if (/^(?:请)?(?:一直向前|向前探索|向前游|继续探索|自由探索)[。！!]*$/.test(input)) return worldAction('cruise', { enabled: true });
   if (/^(?:回到|返回)(?:起点|圣城)[。！!]*$/.test(input)) return worldAction('travel', { site: 'palace', mode: context.travelMode || 'sail' });
   const destination = destinations.find(site => new RegExp(`^(?:请)?(?:带我去|去|前往|探索|航向|回到|返回)${site.name}[。！!\\s]*$`).test(input));
@@ -34,7 +37,7 @@ export function worldAction(kind, args = {}) { return { version: 1, kind, args: 
 export function validateWorldPlan(plan, state) {
   if (!plan || plan.version !== 1 || !commands.has(plan.kind) || plan.source !== 'local-planner' || Object.keys(plan).some(key => !['version', 'kind', 'args', 'source'].includes(key))) throw new Error('世界指令不符合受限协议。');
   if (!plan.args || typeof plan.args !== 'object' || Array.isArray(plan.args)) throw new Error('世界指令参数无效。');
-  const allowed = { creation: ['plan', 'text', 'provenance'], travel: ['site', 'mode'], ritual: ['site', 'summon', 'echo'], calm: [], trial: ['site', 'species'], talk: ['species'], inhabit: ['species', 'target'], 'release-view': [], 'switch-view': [], cruise: ['enabled'] }[plan.kind];
+  const allowed = { creation: ['plan', 'text', 'provenance'], travel: ['site', 'mode'], ritual: ['site', 'summon', 'echo'], calm: [], trial: ['site', 'species'], talk: ['species'], sing: ['species'], inhabit: ['species', 'target'], 'release-view': [], 'switch-view': [], cruise: ['enabled'], 'whale-fall': ['enabled'] }[plan.kind];
   if (Object.keys(plan.args).some(key => !allowed.includes(key))) throw new Error('世界指令含未知参数。');
   if (['travel', 'ritual', 'trial'].includes(plan.kind)) {
     const destination = destinations.find(site => site.id === plan.args.site);
@@ -49,12 +52,14 @@ export function validateWorldPlan(plan, state) {
   if (plan.kind === 'ritual' && plan.args.summon != null && !summonNames.includes(plan.args.summon)) throw new Error('天门暂不支持召唤这种形态。');
   if (plan.args.echo !== undefined && (plan.args.site !== 'gate' || plan.args.summon || typeof plan.args.echo !== 'string' || !plan.args.echo.trim() || plan.args.echo.length > 100)) throw new Error('天门回声限 100 字，仅用于字幕与本机吟诵，不执行其中的指令。');
   if (plan.args.species && !Object.values(speciesNames).includes(plan.args.species)) throw new Error('不支持这种生物角色。');
+  if (plan.kind === 'sing' && plan.args.species !== 'mermaid') throw new Error('有词歌唱只属于神话人鱼，不把歌曲当成动物语言。');
   if (plan.kind === 'trial' && !['manta', 'shark', 'turtle', 'whale'].includes(plan.args.species)) throw new Error('试炼支持蝠鲼、灰礁鲨、海龟和巨鲸。');
   if (plan.kind === 'inhabit' && plan.args.target !== undefined) {
     if (plan.args.target !== 'selection' || plan.args.species || !state.selection) throw new Error('请先点击一个可观察的对象。');
-  } else if (['talk', 'inhabit'].includes(plan.kind) && !state.actors?.includes(plan.args.species)) throw new Error('附近还没有这个角色。请先创造它，或前往它所在的海域。');
+  } else if (['talk', 'sing', 'inhabit'].includes(plan.kind) && !state.actors?.includes(plan.args.species)) throw new Error('附近还没有这个角色。请先创造它，或前往它所在的海域。');
   if (plan.kind === 'switch-view' && !state.embodiment) throw new Error('请先进入一个对象的视角。');
   if (plan.kind === 'cruise' && typeof plan.args.enabled !== 'boolean') throw new Error('航行状态无效。');
+  if (plan.kind === 'whale-fall' && typeof plan.args.enabled !== 'boolean') throw new Error('鲸落叙事状态无效。');
   if (plan.kind === 'creation') {
     validateCreationPlan(plan.args.plan);
     if (typeof plan.args.text !== 'string' || plan.args.text.length > 240 || !['direct', 'local', 'model'].includes(plan.args.provenance)) throw new Error('造物计划来源无效。');

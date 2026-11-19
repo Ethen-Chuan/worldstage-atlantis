@@ -87,6 +87,8 @@ export class EndlessOcean {
     const ground = new THREE.Mesh(geometry, this.materials.sand); ground.receiveShadow = true; root.add(ground);
     const decorations = new THREE.Group();
     const rocks = new THREE.InstancedMesh(this.rock, this.materials.rock, 20);
+    rocks.userData.collisionBoxes = [];
+    this.rock.computeBoundingBox();
     let rockCount = 0;
     for (let index = 0; index < 20; index++) {
       const localX = worldHash(horizontal, depth, index * 5 + 51) * CHUNK_SIZE;
@@ -98,6 +100,8 @@ export class EndlessOcean {
       this.transform.scale.set(size, size * (biome.id === 'trench' ? 2.6 : 0.8), size * 1.1);
       this.transform.rotation.set(0.2, worldHash(horizontal, depth, index * 5 + 54) * 6, 0.2);
       this.transform.updateMatrix(); rocks.setMatrixAt(rockCount++, this.transform.matrix);
+      const bounds = this.rock.boundingBox.clone().applyMatrix4(this.transform.matrix);
+      rocks.userData.collisionBoxes.push({ min: bounds.min.toArray(), max: bounds.max.toArray() });
     }
     rocks.count = rockCount; rocks.computeBoundingSphere(); rocks.castShadow = rocks.receiveShadow = true; decorations.add(rocks);
     const landmarks = chunkLandmarks(horizontal, depth);

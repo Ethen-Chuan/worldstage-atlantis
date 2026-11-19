@@ -5,6 +5,7 @@ import { createWhale, createManta } from './creatures.js';
 import { LANDMARKS } from './landmarks.js';
 import { seaHeight } from './terrain.js';
 import { seededRandom } from './core.js';
+import { starOrbit } from './star-shoal.js';
 
 export function wonderEnvelope(elapsed) {
   if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= 14) return 0;
@@ -75,16 +76,16 @@ function fishVortex(materials) {
   const body = new THREE.SphereGeometry(1, 6, 4); body.scale(0.19, 0.32, 0.95);
   const tail = new THREE.ConeGeometry(0.5, 0.7, 3); tail.rotateX(Math.PI / 2); tail.scale(0.15, 1, 1); tail.translate(0, 0, 0.98);
   const geometry = mergeGeometries([body, tail]); body.dispose(); tail.dispose();
-  const material = new THREE.MeshStandardMaterial({ color: '#dde3ca', emissive: '#4a8f92', emissiveIntensity: 0.75, roughness: 0.3, metalness: 0.6 });
+  const material = new THREE.MeshStandardMaterial({ color: '#c8d1bc', emissive: '#447c78', emissiveIntensity: 0.3, roughness: 0.32, metalness: 0.5 });
   const count = 1500;
   const fish = new THREE.InstancedMesh(geometry, material, count); fish.instanceMatrix.setUsage(THREE.DynamicDrawUsage); fish.frustumCulled = false;
   fish.userData.creature = 'shoal';
   const random = seededRandom(957);
-  const paths = Array.from({ length: count }, () => ({ angle: random() * Math.PI * 2, layer: random(), depth: random() - 0.5, speed: 0.065 + random() * 0.035, scale: 0.55 + random() * 0.9 }));
+  const paths = Array.from({ length: count }, (_, index) => ({ angle: random() * Math.PI * 2, lane: index % 3, layer: random(), depth: random() - 0.5, speed: 0.038 + index % 3 * 0.008 + random() * 0.007, scale: 0.42 + random() * 0.56 }));
   const gold = new THREE.Color('#edc36e'); const blue = new THREE.Color('#53b7c9');
   paths.forEach((item, index) => fish.setColorAt(index, gold.clone().lerp(blue, item.layer > 0.58 ? 0.85 : item.layer * 0.45)));
   root.add(fish);
-  const sparks = sparkCloud(4200, ['#f6c87a', '#4abac6', '#8cbed0'], 0, 861); root.add(sparks.root);
+  const sparks = sparkCloud(1300, ['#b1c9b9', '#85b4b2', '#a0bac5'], 0, 861); root.add(sparks.root);
   const whale = createWhale(); whale.root.scale.setScalar(1.8); root.add(whale.root);
   const armillary = new THREE.Group(); armillary.position.y = 75; root.add(armillary);
   const bronze = new THREE.MeshStandardMaterial({ color: '#a78e5c', metalness: 0.72, roughness: 0.42 });
@@ -112,17 +113,20 @@ function fishVortex(materials) {
   }
   root.add(ruin.finish('drowned-observatory'));
   const transform = new THREE.Object3D(); const direction = new THREE.Vector3(); const axis = new THREE.Vector3(0, 0, -1);
-  return { root, animate(time, delta, energy) {
+  return { root, animate(time, delta, energy, collisions, offset) {
+    root.updateWorldMatrix(true, false);
+    const worldMatrix = root.matrixWorld.clone();
+    if (offset) { worldMatrix.elements[12] += offset.x; worldMatrix.elements[13] += offset.y; worldMatrix.elements[14] += offset.z; }
+    const localMatrix = worldMatrix.clone().invert();
     paths.forEach((item, index) => {
-      const angle = item.angle + time * item.speed;
-      const radius = 29 + item.layer * 30 + Math.sin(angle * 3 + item.layer * 9) * 3 + energy * item.layer * 18;
-      transform.position.set(Math.cos(angle) * radius, 75 + Math.sin(angle) * radius * 0.87, item.depth * 22 + Math.sin(angle * 2) * 4);
-      direction.set(-Math.sin(angle), Math.cos(angle) * 0.87, Math.cos(angle * 2) * 0.12).normalize();
+      transform.position.fromArray(starOrbit(time, item, energy));
+      direction.fromArray(starOrbit(time + 0.03, item, energy)).sub(transform.position).normalize();
+      if (collisions) transform.position.copy(collisions.avoidSmall(transform.position.clone().applyMatrix4(worldMatrix), item.scale)).applyMatrix4(localMatrix);
       transform.quaternion.setFromUnitVectors(axis, direction);
       transform.scale.setScalar(item.scale * (1 + energy * 0.1)); transform.updateMatrix(); fish.setMatrixAt(index, transform.matrix);
     });
     fish.instanceMatrix.needsUpdate = true;
-    material.emissiveIntensity = 0.6 + energy * 1.2;
+    material.emissiveIntensity = 0.3 + energy * 0.7;
     sparks.animate(time, energy);
     bands.forEach((band, index) => { band.rotation.z = index * 1.4 + Math.sin(time * 0.035 + index) * 0.08; band.rotation.y = (index === 2 ? -0.55 : 0.16) + Math.sin(time * 0.045 + index) * 0.045 + energy * 0.045; });
     inlay.emissiveIntensity = 0.3 + energy * 0.85;
@@ -177,8 +181,8 @@ function prismGarden(materials) {
         float lattice = max(veins, crossVeins * 0.55);
         float edge = pow(fanUV.y, 11.0);
         float pulse = pow(0.5 + 0.5 * sin(length(fanPosition.xz) * 0.08 - gardenTime * 1.4), 6.0);
-        vec3 radiance = fanColor * (0.48 + lattice * 1.15 + edge * 0.5 + gardenEnergy * pulse * (0.38 + lattice * 0.8));
-        gl_FragColor = vec4(radiance, 0.2 + lattice * 0.58 + edge * 0.18);
+        vec3 radiance = fanColor * (0.36 + lattice * 0.45 + edge * 0.12 + gardenEnergy * pulse * (0.5 + lattice * 1.1));
+        gl_FragColor = vec4(radiance, 0.48 + lattice * 0.36 + edge * 0.12);
         #include <fog_fragment>
       }`,
   });
@@ -295,7 +299,7 @@ export class WonderScene {
       if (!entry.root.visible) continue;
       entry.proximity = THREE.MathUtils.damp(entry.proximity, 1 - THREE.MathUtils.smoothstep(distance, 85, 250), 0.65, delta);
       entry.energy = THREE.MathUtils.damp(entry.energy, Math.min(1, entry.proximity * 0.28 + wonderEnvelope(time - entry.pulseStart)), 2, delta);
-      entry.animate(time, delta, entry.energy);
+      entry.animate(time, delta, entry.energy, this.collisions, offset);
     }
   }
 

@@ -17,6 +17,8 @@ import { SeaChart, seaChartMarkup } from './sea-chart.js';
 import { embodimentMarkup } from './embodiment.js';
 import { playMarkup, SITE_PLAY } from './tide-play.js';
 import './interaction.css';
+import './responsive.css';
+import { setupViewport } from './viewport.js';
 import { planWorld, worldAction, WorldDirector, validateWorldPlan } from './world-planner.js';
 
 const paths = {
@@ -33,7 +35,7 @@ document.querySelector('#app').innerHTML = `
   <main class="experience" aria-label="即境 · 语言造物">
     <div id="ocean" class="ocean"></div><div class="cinema-shade" aria-hidden="true"></div><div id="water-transition" class="water-transition" aria-live="polite"><span id="transition-label"></span></div>
     <div id="loading" class="loading"><img src="./mark.svg" alt=""/><span>一座沉睡的城，正在醒来。</span><small>构筑石阶与穹顶 · 等待第一束光</small><div class="loading-line"></div></div>
-    <header class="topbar"><button id="home-button" class="brand" aria-label="回到圣城初始视角"><img src="./mark.svg" alt=""/><span>即境<small>WORLDSTAGE</small></span></button><div class="edition"><span>A WORLD, IN YOUR WORDS</span><b>亚特兰蒂斯 <i>/</i> 造物篇</b></div><nav class="top-actions" aria-label="画面控制"><button id="settings-button" class="text-button">体验设置</button>${control('sound-button', 'muted', '开启奇观管弦配乐')}${control('pause-button', 'pause', '暂停画面')}${control('immersive-button', 'expand', '纯净观景')}</nav></header>
+    <header class="topbar"><button id="home-button" class="brand" aria-label="回到圣城初始视角"><img src="./mark.svg" alt=""/><span>即境<small>WORLDSTAGE</small></span></button><div class="edition"><span>A WORLD, IN YOUR WORDS</span><b>亚特兰蒂斯 <i>/</i> 造物篇 <small>0.9</small></b></div><nav class="top-actions" aria-label="画面控制">${control('tools-button', 'layers', '探索工具')}<button id="settings-button" class="text-button">设置</button>${control('sound-button', 'muted', '开启奇观管弦配乐')}${control('pause-button', 'pause', '暂停画面')}${control('immersive-button', 'expand', '全屏观看')}</nav></header>
     <section class="world-title" aria-label="作品介绍"><div class="eyebrow">THE PALACE OF TIDES</div><h1>一念生城。<br/><em>万物有回声。</em></h1><p>这里的巨兽，记得潮汐以前的事。<br/>而这个世界，等待你的下一句话。</p><button id="first-wonder" class="wonder-invitation">先去看一场奇观 <span aria-hidden="true">↗</span></button><small>实时三维 · 语言造物 · 每一步都能反悔</small></section>
     <div class="world-tools"><button id="objects-button" class="objects-button">${icon('layers')}<span>此刻的造物</span><b id="object-count">04</b></button><button id="journey-button" class="text-button">${icon('compass')} 海域与奇观</button></div>
     <div id="selection-label" class="selection-label" hidden><span class="selection-dot"></span><span id="selected-name"></span>${control('focus-button', 'focus', '靠近选中的造物')}${control('clear-selection', 'close', '取消选择')}</div>
@@ -43,15 +45,17 @@ document.querySelector('#app').innerHTML = `
       <div id="intent-preview" class="intent-preview" role="status" aria-live="polite" hidden></div><div class="composer-footer"><span id="input-hint">点击生物立即化身 · 点击静物环绕 · Esc 返回</span><div class="undo-tools">${control('undo-button', 'undo', '撤销上一步')}${control('redo-button', 'redo', '重做上一步')}<button id="stop-button">暂停造物</button></div></div></section>
     <div class="scene-caption"><span id="place-name">潮生圣城</span><small id="place-caption">148 M BELOW THE SURFACE</small></div><div class="capture-tools">${control('snapshot-button', 'camera', '保存当前画面')}<span>留住这一刻</span></div>
     <footer class="bottomline"><button id="boundary-button"><i></i> 实时 3D 造物原型 <span>· 非 AI 视频模型生成</span></button><span>拖动环顾 <i> / </i> 滚轮靠近</span></footer>
-    <aside id="objects-panel" class="drawer" aria-label="此刻的造物" hidden>${panelHead('objects', 'THE THINGS YOU SHAPED', '此刻的造物')}<p class="drawer-intro">点选一个，再说“让它……”<br/>身份保持不变，修改只发生在选中的事物上。</p><div id="object-list"></div><section class="about-section"><h3>让世界留在这里</h3><p id="memory-summary">尚无本机存档。</p><div class="memory-actions"><button id="load-world" class="primary-button" disabled>继续上次的世界</button><button id="forget-world" class="text-button" disabled>删除存档</button></div><p>仅手动保存到此浏览器。保留造物、关系、视角与足迹；不保存输入原文、录音或密钥。清理浏览器数据会清除存档。</p></section><p class="drawer-note">最多 20 个可编辑造物，远处的自然遗迹不计入。<br/>离开前点击“保存世界”。未保存的改变会在刷新后消失。</p></aside>
+    <aside id="objects-panel" class="drawer" aria-label="此刻的造物" hidden>${panelHead('objects', 'THE THINGS YOU SHAPED', '此刻的造物')}<p class="drawer-intro">点击条目直接进入它的视角。<br/>进入后点“对世界说话”，仍可继续修改它。</p><div id="object-list"></div><section class="about-section"><h3>让世界留在这里</h3><p id="memory-summary">尚无本机存档。</p><div class="memory-actions"><button id="load-world" class="primary-button" disabled>继续上次的世界</button><button id="forget-world" class="text-button" disabled>删除存档</button></div><p>仅手动保存到此浏览器。保留造物、关系、视角与足迹；不保存输入原文、录音或密钥。清理浏览器数据会清除存档。</p></section><p class="drawer-note">最多 20 个可编辑造物，远处的自然遗迹不计入。<br/>离开前点击“保存世界”。未保存的改变会在刷新后消失。</p></aside>
     <aside id="history-panel" class="drawer" aria-label="创作记录" hidden>${panelHead('history', 'WORDS BECOME WORLDS', '世界如何生长')}<p class="drawer-intro">你的描述、理解来源与应用结果。<br/>不是预录视频，每次改变都有据可查。</p><div id="history-list"></div></aside>
+    <aside id="tools-panel" class="drawer tools-panel" aria-label="探索工具" hidden>${panelHead('tools', 'EXPLORE AT YOUR OWN PACE', '探索与创造')}<p class="drawer-intro">在画面里点到谁，就直接进入谁的视角。<br/>这里收纳海图、小游戏、存档与录像。</p><div id="tools-content"></div></aside>
     <aside id="journey-panel" class="drawer" aria-label="海域与奇观" hidden>${panelHead('journey', 'AN ATLAS WITHOUT AN EDGE', '奇观在远方')}<p class="drawer-intro">四处遗迹，三种不断变化的奇观。<br/>先去看见，再用一句话唤醒。</p><div class="travel-mode" role="group" aria-label="地点切换方式"><button id="mode-quick" aria-pressed="true">快速抵达</button><button id="mode-sail" aria-pressed="false">沿途漫游</button></div><p id="travel-mode-note" class="travel-mode-note">默认快速切换，世界和你的造物不会重置。</p><div class="atlas-count"><span id="visited-count">01 / 07 已抵达</span><span>遗迹与动态奇观</span></div><div class="region-list">${[...LANDMARKS.filter(item => item.wonder), ...LANDMARKS.filter(item => !item.wonder)].map(landmark => `<button data-region="${landmark.id}" aria-label="前往${landmark.name}"><small>${landmark.number}</small><span>${landmark.name}${landmark.wonder ? '<strong class="wonder-type">动态奇观</strong>' : ''}<em>${landmark.caption}</em><i data-distance="${landmark.id}"></i></span><b data-visited="${landmark.id}">↗</b></button>`).join('')}</div><p class="drawer-note">拖动环顾，WASD 前后左右，Q / E 升降。<br/>触屏可拖动转向，点击“持续前游”。地标之外仍可探索，没有固定地图墙。</p></aside>
     <aside id="settings-panel" class="drawer" aria-label="设置与能力说明" hidden>${panelHead('settings', 'THE CRAFT BEHIND THE WORLD', '让想象有所回应')}
       <section class="about-section"><h3>这一版可以创造什么</h3><p>14 类资产：神殿、拱门、星门、珊瑚、鲸鱼、鲨鱼、蝠鲼、水母、鱼群、三叉戟、装甲古鱼、海龟、鹦鹉螺、人鱼。文字可以指定位置、数量、尺度、材质色、光芒、速度与高度；遗迹可调整侵蚀与附生珊瑚。</p><p>例如：“创造一只海龟” → “让海龟跟随鲸鱼”。可让生物同行、环绕建筑，或让鲸鱼接近珊瑚时触发发光。说“停止跟随”，它会留在旅途中的当前位置。</p><p>形状来自程序化三维资产的参数组合，不支持任意新物种、逐帧视频生成、真实物理或自动避障。命名地标和环境生态不属于可修改造物；可以进入其视角，或另行创造同类。装甲古鱼、人鱼是幻想设计，不是科学复原；本版没有使用 Blender 雕刻或扫描资产。</p></section>
       <section class="about-section"><h3>理解引擎</h3><p id="model-status">正在检查服务配置……</p><button id="model-toggle" class="primary-button" disabled>大模型尚未配置</button><p>默认是有边界的本地规则，不假装任意自然语言都能理解。模型接入后也只能操作支持的资产和属性；失败不会偷偷降级。</p></section>
-      <section class="about-section"><h3>让世界持续回应</h3><p>七处海域有不同主题的 36 秒盛典：蓄光、绽放、齐鸣与余辉。天门支持召唤已有生物形态。三类小游戏规则分布于七处地点：依序穿环、自由采光、呼吸节拍；可选择蝠鲼、灰礁鲨、海龟或巨鲸，重复挑战。</p><p>点选生物可以代入，点选静物可以环绕。暂停会冻结画面，轻声伴奏继续；“让海流平静”让盛典缓缓结束。试炼成绩和盛典仅保留在本次会话，不写入造物存档。</p></section>
+      <section class="about-section"><h3>让世界持续回应</h3><p>微光沿着水流、珊瑚枝脉与石纹传播；鱼群形成倾斜交叠的星环。花火只作为层次与规模的美术参考，不在海底发射烟花或举办庆典。天门支持召唤已有生物形态，三类小游戏可重复探索。</p><p>直接点击生物进入它的第一视角，点击静物进入环绕视角。代入后可用当前生物探索；未代入时小游戏以蝠鲼开始，不弹视角选择框。暂停会冻结画面，轻声伴奏继续；“让海流平静”让环境回应缓缓结束。</p></section>
+      <section class="about-section"><h3>一片有竞争的海</h3><p id="ecology-status">灰礁鲨追捕礁鱼，鱼群分散躲避；捕食后会饱食休息，不持续屠杀。</p><p>种群补充受迁入间隔和可见范围限制。保护正在操控的角色与手工造物；不显示血腥。有限捕食与种群模型，不代表完整食物网、遗传演化或真实种群比例。</p><h3>鲸鸣与鲸落</h3><p>近旁活鲸发出低沉、随距离衰减的合成鲸鸣，非水听器实录。鲸落花园可主动观看 76 秒时间叙事；活鲸回声退去后不再鸣叫。遗骸与生态接续是漫长过程的压缩艺术演绎，保留神话花园，不作为深海生态科学复原。</p></section>
       <section class="about-section"><h3>混合世界架构</h3><p>规划器理解意图，白名单校验可执行范围；持久造物状态与即时世界反馈记录位置、关系、视角和试炼进度；三维、镜头和音频负责连续呈现。文字与主要互动按钮共用执行入口。</p><p>当前是“规则规划器 + 显式世界状态 + 实时渲染器”，不是经过训练的神经世界模型。可选语言模型只输出受限造物计划，不能直接执行代码；公开版不调用付费模型，也未集成高斯泼溅。</p></section>
-      <section class="about-section"><h3>画面与动态</h3><label class="setting-row">画质<select id="quality-select"><option value="high">精细</option><option value="balanced" selected>均衡</option><option value="performance">流畅</option></select></label><label class="setting-row">降低动态效果<input id="reduced-toggle" type="checkbox"/></label><p id="performance-note">根据设备选择画质，优先保持交互流畅。</p><button id="fullscreen-button" class="text-button">进入全屏</button></section>
+      <section class="about-section"><h3>画面与动态</h3><label class="setting-row">画质<select id="quality-select"><option value="high">精细</option><option value="balanced" selected>均衡</option><option value="performance">流畅</option></select></label><label class="setting-row">降低动态效果<input id="reduced-toggle" type="checkbox"/></label><p id="performance-note">根据设备选择画质，优先保持交互流畅。</p><button id="fullscreen-button" class="text-button">全屏观看</button><p>安卓支持时使用浏览器全屏；iPhone 不支持时进入纯净观景。可从 Safari 分享菜单添加到主屏幕，以独立窗口打开。横竖屏均可操作。</p></section>
       <section class="about-section"><h3>隐私与素材</h3><p>本地模式不外发文字。语音可能使用浏览器提供商服务，先告知再使用；识别后仅填入输入框，确认才执行。不保存录音。模型模式另行征求同意。</p><p>参考图仅用于本地美术分析，没有作为背景贴图，也未上传外部模型。石材纹理由 Poly Haven CC0 资源提供；建筑和生态为程序化建模，声音为程序合成。</p></section></aside>
     <dialog id="voice-consent" aria-labelledby="voice-title"><form method="dialog"><span class="eyebrow">VOICE INPUT</span><h2 id="voice-title">先说清楚，再听你说。</h2><p>语音由浏览器识别，音频可能发送给浏览器提供商。本作品不保存录音。</p><p>识别结果只填入输入框。请检查文字，再点击创造。</p><div class="dialog-actions"><button value="cancel">继续用文字</button><button value="allow" class="primary-button">同意并开启麦克风</button></div></form></dialog>
     <dialog id="model-consent" aria-labelledby="model-title"><form method="dialog"><span class="eyebrow">LANGUAGE MODEL</span><h2 id="model-title">让模型理解，让世界执行。</h2><p>你的文字、最近 4 条描述和必要的造物状态将发送给 <strong id="model-provider"></strong>。服务可能收费，并受其数据政策约束。</p><p>不发送参考图、文件或录音；密钥仅在服务端。模型结果经过白名单校验，不能执行任意代码。</p><div class="dialog-actions"><button value="cancel">保留本地模式</button><button value="allow" class="primary-button">同意并启用</button></div></form></dialog>
@@ -87,10 +91,11 @@ let loadingStarted = performance.now();
 let readyMilliseconds = null;
 const transcript = [];
 const sound = new OceanSound();
-const panelIds = ['objects', 'history', 'journey', 'settings', 'chart'];
+const panelIds = ['objects', 'history', 'journey', 'settings', 'chart', 'tools'];
 const mediaExperience = setupMedia({ getOcean: () => ocean, toast });
 const seaChart = new SeaChart({ navigate: (id, mode) => dispatchWorld(worldAction('travel', { site: id, mode })), open: () => panel('chart', true), guide: () => panel('journey', true) });
 const director = new WorldDirector({ observe: observeWorld, render: renderWorldAction });
+const viewportControls = setupViewport({ closePanels: () => panel('tools', false), toast });
 let soundtrackSite = null;
 document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('cancel', () => { dialog.returnValue = 'cancel'; }));
 
@@ -105,6 +110,7 @@ function panel(name, open) {
   for (const id of panelIds) elements[`${id}-panel`].hidden = id !== name || !open;
   document.body.classList.toggle('panel-open', open);
   elements['chart-button'].setAttribute('aria-expanded', String(open && name === 'chart'));
+  elements['tools-button'].setAttribute('aria-expanded', String(open && name === 'tools'));
   if (open) elements[`close-${name}`].focus(); else returnFocus?.focus();
 }
 function fill(text) { elements.message.value = text; elements.message.focus(); elements['input-hint'].textContent = '示例只填入，不执行。改成你的想法，再按回车。'; previewIntent(); }
@@ -132,7 +138,12 @@ function renderState() {
     const content = document.createElement('span'); const name = document.createElement('strong'); name.textContent = ASSETS[item.asset];
     const detail = document.createElement('em'); detail.textContent = `${item.preset ? '初始造物' : '你的创造'} · ${item.params.scale.toFixed(2)}×${item.orbit ? ' · 环绕中' : ''}${item.following ? ' · 与你同行' : ''}${item.leader ? ' · 结伴巡游' : ''}${item.resonance ? ' · 距离共鸣' : ''}`;
     content.append(name, detail); button.append(number, content);
-    button.addEventListener('click', () => { select(item.id); panel('objects', false); toast(`已选中${item.name}，可说“让它……”`); }); elements['object-list'].append(button);
+    button.addEventListener('click', () => {
+      const entry = ocean?.creationScene.objects.get(item.id);
+      if (!entry) return;
+      const candidate = { root: entry.root, shape: entry.shape, id: item.id, living: LIVING_ASSETS.includes(item.asset), species: item.asset, name: item.name, point: entry.root.getWorldPosition(ocean.camera.position.clone()).add(ocean.worldOffset) };
+      panel('objects', false); enterSceneObject(candidate);
+    }); elements['object-list'].append(button);
   }
   elements['undo-button'].disabled = !state.past.length; elements['redo-button'].disabled = !state.future.length;
   elements['pause-button'].innerHTML = icon(state.paused ? 'play' : 'pause'); elements['pause-button'].setAttribute('aria-label', state.paused ? '继续画面' : '暂停画面'); elements['pause-button'].setAttribute('aria-pressed', String(state.paused));
@@ -159,7 +170,7 @@ function previewIntent() {
     if (world) {
       try {
         validateWorldPlan(world, observeWorld());
-        const labels = { travel: '前往所选海域', ritual: world.args.summon ? `唤醒奇观并召唤${world.args.summon}` : '奏响海底盛典', calm: '让光与和声缓缓平息', trial: '化身生物，开启当地试炼', talk: '触发附近角色的预设回应', inhabit: '进入生物视角', 'release-view': '平滑返回自由探索', cruise: '沿当前朝向持续前游' };
+        const labels = { travel: '前往所选海域', ritual: world.args.summon ? `唤醒奇观并召唤${world.args.summon}` : '让微光沿海流传播', calm: '让光与和声缓缓平息', trial: '化身生物，开启当地试炼', talk: '触发附近角色的预设回应', sing: '邀请人鱼演唱有词歌曲', inhabit: '进入生物视角', 'release-view': '平滑返回自由探索', cruise: '沿当前朝向持续前游', 'whale-fall': world.args.enabled ? '观看鲸落时间叙事' : '结束鲸落叙事' };
         preview.classList.remove('issue'); preview.textContent = `${labels[world.kind]} · 发送后执行，世界尚未改变`;
       } catch (error) { preview.classList.add('issue'); preview.textContent = error.message; }
       return;
@@ -287,9 +298,6 @@ elements['focus-button'].addEventListener('click', () => { ocean?.focusCreation(
 elements['quality-select'].addEventListener('change', event => ocean?.setQuality(event.target.value));
 elements['reduced-toggle'].checked = matchMedia('(prefers-reduced-motion: reduce)').matches;
 elements['reduced-toggle'].addEventListener('change', event => { if (ocean) ocean.reduced = event.target.checked; document.body.classList.toggle('reduced-motion', event.target.checked); });
-function immersive(enabled) { document.body.classList.toggle('immersive', enabled); elements['exit-immersive'].hidden = !enabled; (enabled ? elements['exit-immersive'] : elements['immersive-button']).focus(); }
-elements['immersive-button'].addEventListener('click', () => immersive(true)); elements['exit-immersive'].addEventListener('click', () => immersive(false));
-elements['fullscreen-button'].addEventListener('click', async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); } catch { toast('当前环境不支持全屏，可使用纯净观景。'); } });
 function updateAudioUI() {
   const audio = sound.inspect(); const playing = audio.enabled && audio.context === 'running';
   elements['sound-button'].innerHTML = `${icon(playing ? 'sound' : 'muted')}<span>${audio.orchestra.status === 'error' ? '重试配乐' : playing ? '配乐开' : '配乐'}</span>`;
@@ -299,6 +307,10 @@ function updateAudioUI() {
   const title = document.querySelector('#score-title'); const status = document.querySelector('#score-status');
   if (title) title.textContent = scoreFor(audio.site).title;
   if (status) status.textContent = audio.orchestra.status === 'error' ? '音色加载失败 · 点击顶部配乐重试' : audio.userMuted ? '已手动静音 · 不会自行重新开启' : !audio.unlocked ? '首次操作世界后奏响' : audio.orchestra.status === 'loading' ? '正在准备管弦音色…' : audio.context !== 'running' ? '音频已挂起 · 点击继续聆听' : audio.paused ? '画面已暂停 · 轻声伴奏继续' : `${scoreFor(audio.site).character} · 随奇观渐变`;
+  const voices = document.querySelector('#creature-voice-status');
+  if (voices) voices.textContent = audio.creatureAudio.status === 'error' ? '歌声或鲸鸣素材未就绪，请重试；不会用合成哼声替代。' : audio.creatureAudio.singing ? '人鱼正在歌唱 · 德彪西《Spleen》· 有法语歌词的女高音与钢琴' : audio.creatureAudio.whaleCalling ? '远方传来座头鲸的回声' : audio.creatureAudio.status === 'loading' ? '正在准备歌声与鲸鸣…' : '靠近人鱼听歌，远处鲸鸣间歇回应；也可输入“让人鱼唱歌”。';
+  const retry = document.querySelector('#retry-creature-voices');
+  if (retry) retry.hidden = audio.creatureAudio.status !== 'error';
 }
 sound.onChange = updateAudioUI;
 elements['sound-button'].addEventListener('click', async () => { try { await sound.toggle(); } catch { toast('浏览器暂未允许声音，请再点一次配乐按钮。'); } });
@@ -394,7 +406,7 @@ elements['voice-consent'].addEventListener('close', () => { if (elements['voice-
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && document.querySelector('dialog[open]')) return;
   if (event.key === 'Escape' && ocean?.embodiment.active) { event.preventDefault(); if (document.body.classList.contains('embodied-chat')) toggleEmbodiedChat(false); else dispatchWorld(worldAction('release-view')); return; }
-  if (event.key === 'Escape') { voice?.stop(); if (document.body.classList.contains('immersive')) immersive(false); for (const name of panelIds) if (!elements[`${name}-panel`].hidden) panel(name, false); }
+  if (event.key === 'Escape') { voice?.stop(); if (document.body.classList.contains('immersive')) viewportControls.exit(); for (const name of panelIds) if (!elements[`${name}-panel`].hidden) panel(name, false); }
   if (event.key === 'Tab' && document.body.classList.contains('panel-open')) {
     const drawer = document.querySelector('.drawer:not([hidden])');
     const controls = [...(drawer?.querySelectorAll('button:not(:disabled), input, select, textarea, a[href]') || [])].filter(element => element.getClientRects().length);
@@ -442,12 +454,17 @@ async function renderWorldAction({ kind, args }) {
     applyResult(args.text, result, { direct: '直接操作 → 世界规划器', local: '本地规则 → 世界规划器', model: '大模型理解 → 白名单 → 世界规划器' }[args.provenance]); return result;
   }
   if (kind === 'travel') return navigate(args.site, args.mode);
+  if (kind === 'whale-fall') {
+    if (!args.enabled) { ocean.whaleFall.stop(); return; }
+    if (ocean.currentLandmark?.id !== 'garden') return { ok: false, message: '先前往鲸落花园，在它的海床旁观看这段时间叙事。' };
+    panel('tools', false); wakeWorld(); ocean.whaleFall.start(); updateEmbodimentUI(); elements.discovery.hidden = true; elements['response-line'].textContent = '海流放慢，观察巨鲸留下的生命馈赠。'; document.body.classList.add('has-explored'); return;
+  }
   if (kind === 'cruise') { ocean.cruising = args.enabled; ocean.travelTarget = null; if (args.enabled) wakeWorld(); renderState(); document.body.classList.add('has-explored'); return; }
   if (kind === 'calm') { ocean.play.calm(); toast('光与和声正在缓缓回落。'); return; }
   if (kind === 'release-view') { endEmbodiment(); return; }
-  if (kind === 'trial') { wakeWorld(); ocean.play.start(args.site, args.species); updateEmbodimentUI(); document.body.classList.add('has-explored'); ocean.renderer.domElement.focus(); return; }
+  if (kind === 'trial') { panel('tools', false); wakeWorld(); ocean.play.start(args.site, args.species); updateEmbodimentUI(); document.body.classList.add('has-explored'); ocean.renderer.domElement.focus({ preventScroll: true }); return; }
   if (kind === 'switch-view') { ocean.embodiment.setView(); updateEmbodimentUI(); return; }
-  if (kind === 'inhabit') { const actor = args.target === 'selection' ? ocean.embodiment.candidate : nearbyActors().find(actor => actor.species === args.species); if (!actor) return { ok: false, message: '它已游远，请重新选择。' }; wakeWorld(); ocean.embodiment.enter(actor); updateEmbodimentUI(); document.body.classList.add('has-explored'); ocean.renderer.domElement.focus(); return; }
+  if (kind === 'inhabit') { const actor = args.target === 'selection' ? ocean.embodiment.candidate : nearbyActors().find(actor => actor.species === args.species); if (!actor) return { ok: false, message: '它已游远，请重新点击。' }; wakeWorld(); ocean.embodiment.enter(actor); updateEmbodimentUI(); document.body.classList.add('has-explored'); ocean.renderer.domElement.focus({ preventScroll: true }); if (actor.species === 'whale') sound.whaleCall?.({ distance: 12 }); return; }
   if (kind === 'talk') {
     const actor = nearbyActors().find(actor => actor.species === args.species);
     const replies = { whale: '我记得这座城尚在海面之上的歌。你若愿意，我与你同行。', shark: '沿着海流前行。与我保持距离，也保持好奇。', turtle: '不必赶路。珊瑚的光，会告诉我们方向。', manta: '把视角交给我，一起穿过那些沉睡的光环。', mermaid: '天门听见名字，海流记住来者。试着呼唤你的伙伴。' };
@@ -455,6 +472,16 @@ async function renderWorldAction({ kind, args }) {
     ocean.pulse(actor.root.getWorldPosition(ocean.camera.position.clone()), 3); sound.voice(args.species, args.species === 'whale'); sound.chant(response);
     elements['response-line'].textContent = response; elements['action-label'].textContent = '预设角色回应 · 非开放式 AI 对话 · 点选生物可进入它的视角';
     if (actor.id) select(actor.id); return;
+  }
+  if (kind === 'sing') {
+    const actor = nearbyActors().find(actor => actor.species === 'mermaid');
+    if (!actor) return { ok: false, message: '人鱼已游远，请靠近后再邀请她歌唱。' };
+    wakeWorld(); await sound.activateFromGesture(); await sound.creatureAudio.prepare();
+    sound.creatureAudio.stopWhale();
+    if (!sound.creatureAudio.sing(actor, { force: true })) return { ok: false, message: sound.userMuted ? '当前已静音，请先开启顶部配乐。' : '歌声录音尚未就绪，请在体验设置重试。' };
+    elements['response-line'].textContent = '她唱起德彪西《Spleen》的一段法语歌，声线随水流漂向远方。';
+    elements['action-label'].textContent = '真实女高音与钢琴录音 · 非无词吟唱 · Xiaobo Su / Giorgi Latsabidze';
+    recentResult = null; return;
   }
   if (kind === 'ritual') {
     const site = LANDMARKS.find(site => site.id === args.site);
@@ -465,13 +492,22 @@ async function renderWorldAction({ kind, args }) {
       if (!result.changed || result.issues.length) return { ok: false, message: result.issues[0] || '召唤未完成。' };
       applyResult(phrase, result, '世界规划器 → 天门召唤');
     }
-    wakeWorld(); ocean.play.celebrate(args.site);
+    panel('tools', false); wakeWorld(); ocean.play.awaken(args.site);
     const response = args.summon ? `潮汐记得你的呼唤。${args.summon}，从旧日之海归来。` : args.echo ? `深海记住了你的呼唤。${args.echo}，愿回声将你唤回。` : `${site.name}，听见了你的声音。`;
-    sound.chant(response); elements['response-line'].textContent = response; elements['action-label'].textContent = args.echo ? '你的呼唤已化为回声 · 可在体验设置开启本机文字吟诵 · 不生成新物种' : '36 秒海底盛典 · 可暂停或让海流平静 · 吟声为合成艺术效果';
+    if (args.site === 'gate') sound.chant(response); elements['response-line'].textContent = response; elements['action-label'].textContent = args.echo ? '你的呼唤已化为回声 · 可在体验设置开启本机文字吟诵 · 不生成新物种' : '光沿着海流与枝脉舒展，再缓缓归于平静';
     recentResult = null; document.body.classList.add('has-interacted');
   }
 }
 function wakeWorld() { state.paused = false; ocean.paused = false; ocean.creationScene.paused = false; mediaExperience.setPaused(false); renderState(); }
+function enterSceneObject(candidate) {
+  if (!ocean || !candidate) return;
+  cancelNavigation();
+  ocean.whaleFall.stop();
+  if (candidate.id) select(candidate.id);
+  ocean.embodiment.candidate = candidate;
+  void dispatchWorld(worldAction('inhabit', { target: 'selection' }));
+  if (!candidate.living && ocean.currentLandmark) ocean.play.awaken(ocean.currentLandmark.id, { quiet: true });
+}
 function updateEmbodimentUI() {
   const active = ocean?.embodiment.active;
   document.body.classList.toggle('is-embodied', Boolean(active)); elements['inhabit-controls'].hidden = !active; elements['swim-pad'].hidden = !active?.living;
@@ -484,27 +520,37 @@ function updateEmbodimentUI() {
 function endEmbodiment() { if (ocean?.play.trial) ocean.play.stop(); else ocean?.embodiment.exit(); updateEmbodimentUI(); elements['home-button'].focus(); }
 elements['inhabit-exit'].addEventListener('click', () => dispatchWorld(worldAction('release-view')));
 elements['inhabit-view'].addEventListener('click', () => dispatchWorld(worldAction('switch-view')));
+elements['inhabit-trial'].addEventListener('click', () => elements['trial-start'].click());
 function toggleEmbodiedChat(open) { document.body.classList.toggle('embodied-chat', open); elements['inhabit-speak'].setAttribute('aria-expanded', String(open)); elements['inhabit-speak'].textContent = open ? '收起对话' : '对世界说话'; if (open) { ocean.movement.clear(); elements.message.focus(); } }
 elements['inhabit-speak'].addEventListener('click', () => toggleEmbodiedChat(!document.body.classList.contains('embodied-chat')));
 for (const button of document.querySelectorAll('[data-swim]')) {
   button.addEventListener('pointerdown', event => { event.preventDefault(); if (!ocean) return; button.setPointerCapture(event.pointerId); ocean.movement.add(button.dataset.swim); });
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, () => ocean?.movement.delete(button.dataset.swim));
 }
-elements['trial-start'].addEventListener('click', () => dispatchWorld(worldAction('trial', { site: ocean?.currentLandmark?.id, species: elements['trial-species'].value })));
+elements['trial-start'].addEventListener('click', () => dispatchWorld(worldAction('trial', { site: ocean?.currentLandmark?.id, species: ['manta', 'shark', 'turtle', 'whale'].includes(ocean?.embodiment.active?.species) ? ocean.embodiment.active.species : 'manta' })));
 elements['trial-exit'].addEventListener('click', () => dispatchWorld(worldAction('release-view')));
 elements['festival-start'].addEventListener('click', () => dispatchWorld(worldAction('ritual', { site: ocean?.currentLandmark?.id })));
 elements['festival-stop'].addEventListener('click', () => dispatchWorld(worldAction('calm')));
+elements['whale-fall-start'].addEventListener('click', () => dispatchWorld(worldAction('whale-fall', { enabled: true })));
+elements['whale-fall-stop'].addEventListener('click', () => dispatchWorld(worldAction('whale-fall', { enabled: false })));
 elements['ritual-example'].addEventListener('click', () => fill(ocean?.currentLandmark?.id === 'gate' ? '唤醒回声天门，召唤鲸鱼' : `唤醒${ocean?.currentLandmark?.name || '潮生圣城'}`));
 const audioSettings = document.createElement('section'); audioSettings.className = 'about-section';
-audioSettings.innerHTML = `<div class="score-now"><span class="eyebrow">THE WORLD HAS A SCORE</span><h3 id="score-title">沉没的王冠</h3><p id="score-status" role="status">首次操作世界后奏响</p></div><p>七处奇观，七段独立的管弦主题。真实录制的弦乐、圆号、竖琴、长笛、定音鼓与钟琴音色，在本机按原创乐谱演奏。抵达时换章，唤醒时铜管渐起，盛典时鼓与钟声加入；不是单一海流循环。</p>${[['music', '奇观配乐'], ['effects', '互动音效'], ['ambience', '海流底声']].map(([channel, label]) => `<label class="setting-row audio-level">${label}<input data-audio-level="${channel}" type="range" min="0" max="100" value="${sound.levels[channel] * 100}" aria-label="${label}音量"/><output>${Math.round(sound.levels[channel] * 100)}%</output></label>`).join('')}<p>首次点击或按键后启声。顶部可一键静音，记住你的选择；暂停画面时轻声伴奏继续，离开标签页时停止声音。音色随项目加载，不上传文字。</p><label class="setting-row">本机文字吟诵<input id="narration-toggle" type="checkbox"/></label><p>仅使用本机中文语音，无本机声音时保留字幕与艺术化吟声；不是历史古语或动物语言复原。</p>`;
+audioSettings.innerHTML = `<div class="score-now"><span class="eyebrow">THE WORLD HAS A SCORE</span><h3 id="score-title">沉没的王冠</h3><p id="score-status" role="status">首次操作世界后奏响</p></div><p>七处奇观，七段独立的管弦主题。真实录制的弦乐、圆号、竖琴、长笛、定音鼓与钟琴音色，在本机按原创乐谱演奏。抵达时换章，环境回应时弦乐与圆号逐层铺开；不是单一海流循环。</p>${[['music', '奇观配乐'], ['effects', '互动音效'], ['ambience', '海流底声']].map(([channel, label]) => `<label class="setting-row audio-level">${label}<input data-audio-level="${channel}" type="range" min="0" max="100" value="${sound.levels[channel] * 100}" aria-label="${label}音量"/><output>${Math.round(sound.levels[channel] * 100)}%</output></label>`).join('')}<p>首次点击或按键后启声。顶部可一键静音，记住你的选择；暂停画面时轻声伴奏继续，离开标签页时停止声音。音色随项目加载，不上传文字。</p><label class="setting-row">本机文字吟诵<input id="narration-toggle" type="checkbox"/></label><p>仅使用本机中文语音，无本机声音时保留字幕与艺术化吟声；不是历史古语或动物语言复原。</p>`;
 elements['settings-panel'].append(audioSettings);
+audioSettings.insertAdjacentHTML('beforeend', '<div class="score-now"><h3>人鱼的歌与远处鲸鸣</h3><p id="creature-voice-status" role="status"></p><button id="retry-creature-voices" hidden>重试歌声与鲸鸣</button><p>人鱼演唱德彪西《Spleen》的法语歌词片段，女高音 Xiaobo Su、钢琴 Giorgi Latsabidze；不是中文原创歌或语音朗读。鲸声来自 NOAA PMEL 公开录音，已处理源文件加速并作空间混音。两者均随“互动音效”音量调整。</p></div>');
+document.querySelector('#retry-creature-voices').addEventListener('click', async () => { await sound.activateFromGesture(); await sound.creatureAudio.prepare(); });
 audioSettings.querySelector('#narration-toggle').addEventListener('change', event => { sound.narration = event.target.checked; if (!sound.narration) sound.stopChant(); else if (!globalThis.speechSynthesis?.getVoices().some(voice => voice.localService && /^zh/i.test(voice.lang))) toast('当前没有可用的本机中文声音，保留字幕与合成吟声，不会改用云端服务。'); });
 audioSettings.querySelectorAll('[data-audio-level]').forEach(input => input.addEventListener('input', () => { sound.setLevel(input.dataset.audioLevel, Number(input.value) / 100); input.nextElementSibling.value = `${input.value}%`; }));
 elements['settings-panel'].insertBefore(audioSettings, elements['settings-panel'].firstElementChild.nextSibling); updateAudioUI();
 function updatePlayUI() {
   const site = ocean.currentLandmark; const play = ocean.play.inspect();
   document.body.classList.toggle('trial-complete', Boolean(play.trial?.finished));
-  elements['site-play'].hidden = !site || Boolean(ocean.embodiment.active);
+  elements['site-play'].hidden = !site;
+  elements['whale-fall-start'].hidden = site?.id !== 'garden';
+  const falling = ocean.whaleFall.inspect();
+  elements['whale-fall-note'].hidden = !falling;
+  if (falling) elements['whale-fall-stage'].textContent = falling.label;
+  elements['inhabit-trial'].hidden = !site || !['manta', 'shark', 'turtle', 'whale'].includes(ocean.embodiment.active?.species) || Boolean(play.trial);
   if (site) { elements['site-play-name'].textContent = SITE_PLAY[site.id].name; elements['site-play-hint'].textContent = SITE_PLAY[site.id].instruction; elements['ritual-example'].textContent = site.id === 'gate' ? '输入召唤内容，让天门回应 →' : '用一句话唤醒这里 →'; }
   elements['trial-hud'].hidden = !play.trial; elements['trial-bearing'].hidden = !play.trial || play.trial.finished;
   if (play.trial) {
@@ -517,8 +563,9 @@ function updatePlayUI() {
       elements['trial-bearing'].querySelector('b').textContent = `下一枚光环 · ${Math.round(Math.hypot(...direction))} m${direction[1] > 8 ? ' · 上浮' : direction[1] < -8 ? ' · 下潜' : ''}`;
     }
   }
-  elements['festival-caption'].hidden = !play.show;
-  if (play.show) { elements['festival-title'].textContent = LANDMARKS.find(site => site.id === play.show.id).name; elements['festival-stage'].textContent = play.show.name; }
+  elements['festival-caption'].hidden = true;
+  if (site) elements['festival-start'].textContent = SITE_PLAY[site.id].invitation;
+  if (!elements['settings-panel'].hidden) { const ecology = ocean.ecology.foodWeb.inspect(ocean.ecology.schools.members); elements['ecology-status'].textContent = `${ecology.lastEvent} 当前近域游鱼 ${ecology.living} 尾 · 本次捕获 ${ecology.captured} 尾 · 迁入 ${ecology.immigrants} 尾。`; }
   if (!ocean.embodiment.active && document.body.classList.contains('is-embodied')) updateEmbodimentUI();
 }
 async function boot() {
@@ -528,7 +575,7 @@ async function boot() {
     ocean = new Ocean(elements.ocean, {
       sound,
       onCeremony: () => { elements.discovery.hidden = true; },
-      onObjectInspect: () => { void dispatchWorld(worldAction('inhabit', { target: 'selection' })); },
+      onObjectInspect: enterSceneObject,
       onCreationSelect: id => select(id), onAnchor: point => { state.anchor = point; select(null); elements['input-hint'].textContent = '已指认一处海床。试着说“在这里创造珊瑚”。'; toast('已指认海床位置 · “这里”将指向此处'); },
       onExplore: () => { cancelNavigation(); document.body.classList.add('has-explored'); }, onFlightInterrupted: () => { journeyState = interruptJourney(journeyState); },
       onRegionChange: () => { elements['water-transition'].classList.remove('crossing'); void elements['water-transition'].offsetWidth; elements['water-transition'].classList.add('crossing'); renderState(); },
@@ -544,6 +591,11 @@ async function boot() {
         const bearing = Math.round((Math.atan2(heading.x, -heading.z) * 180 / Math.PI + 360) % 360);
         seaChart.update({ position: position.toArray(), bearing, visited: [...discovered] });
         updatePlayUI();
+        const audible = nearbyActors().map(actor => {
+          const direction = actor.root.getWorldPosition(ocean.camera.position.clone()).sub(ocean.camera.position).normalize();
+          return { ...actor, pan: direction.x * -heading.z + direction.z * heading.x };
+        });
+        sound.creatureAudio.update(audible, { falling: Boolean(ocean.whaleFall.active) });
         const site = ocean.currentLandmark?.id || ocean.currentBiome?.id;
         if (site !== soundtrackSite) { soundtrackSite = site; sound.setScene(site); }
         elements['place-caption'].textContent = `${String(bearing).padStart(3, '0')}° / ${Math.round(position.x)} E · ${Math.round(-position.z)} N`;

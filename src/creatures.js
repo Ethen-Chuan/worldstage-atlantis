@@ -265,7 +265,7 @@ export function createJellies() {
   };
 }
 
-export function createSchools(scene) {
+export function createSchools(scene, collisions = null) {
   const body = new THREE.SphereGeometry(1, 8, 5);
   body.scale(0.2, 0.36, 0.85);
   const tail = new THREE.ConeGeometry(0.5, 0.6, 3);
@@ -288,6 +288,11 @@ export function createSchools(scene) {
       const centers = [[-36, 37, 42], [48, 32, -68], [-20, 65, -115], [20, 18, 118]];
       const center = centers[item.group];
       transform.position.set(center[0] + Math.cos(angle) * item.radius * 1.8, center[1] + item.height + Math.sin(time * 0.5 + item.phase) * 0.45, center[2] + Math.sin(angle) * item.radius);
+      if (collisions) {
+        const target = collisions.avoidSmall(transform.position, item.size);
+        transform.position.copy(collisions.move(item.position || target, target, { radius: item.size, dynamic: false }));
+        item.position = transform.position.clone();
+      }
       transform.rotation.set(0, -angle, Math.sin(time * 5 + item.phase) * 0.07);
       transform.scale.setScalar(item.size);
       transform.updateMatrix();

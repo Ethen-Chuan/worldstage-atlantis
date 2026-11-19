@@ -1,0 +1,10 @@
+{
+  "name": "即境 · 亚特兰蒂斯",
+  "short_name": "即境",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#071d24",
+  "theme_color": "#071d24",
+  "icons": [{ "src": "./mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

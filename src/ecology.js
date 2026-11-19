@@ -6,6 +6,7 @@ import { localLandmark } from './landmarks.js';
 import { createAncientFish, createTurtle, createNautilus, createMermaid } from './mythic-creatures.js';
 import { dampAngle } from './swim.js';
 import { createShark } from './shark.js';
+import { FoodWeb } from './food-web.js';
 
 const REEF_COLORS = ['#be795b', '#d3a777', '#9c7891', '#7a9c91', '#c299a3'];
 const CELL = 180;
@@ -50,6 +51,7 @@ function colored(geometry, color) {
 
 function reefTemplate(seed, time) {
   const random = seededRandom(seed); const root = new THREE.Group();
+  root.userData.collisionBoxes = [];
   const segments = []; const transform = new THREE.Object3D();
   const add = (geometry, color, position, scale = [1, 1, 1], rotation = [0, 0, 0]) => {
     transform.position.set(...position); transform.scale.set(...scale); transform.rotation.set(...rotation); transform.updateMatrix();
@@ -62,6 +64,7 @@ function reefTemplate(seed, time) {
     const horizontal = Math.cos(angle) * radius; const depth = Math.sin(angle) * radius;
     const height = 2.1 + random() * 2.8;
     add(new THREE.IcosahedronGeometry(1, 1), '#697e70', [horizontal, 0, depth], [3.3, height, 3.1]);
+    root.userData.collisionBoxes.push({ min: [horizontal - 3.3, -height, depth - 3.1], max: [horizontal + 3.3, height + 0.5, depth + 3.1] });
     const hue = REEF_COLORS[(mound + seed) % REEF_COLORS.length];
     for (let tier = 0; tier < 4; tier++) {
       const width = 2.3 + random() * 2.8 - tier * 0.36;
@@ -174,26 +177,30 @@ function schools(time) {
     const mesh = new THREE.InstancedMesh(schoolGeometry(kind), material, count); mesh.frustumCulled = false; mesh.userData.noAO = true; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.userData.creature = 'shoal';
     const members = Array.from({ length: count }, (_, index) => ({ phase: random() * Math.PI * 2, radius: 6 + random() * 15, height: (random() - 0.5) * 12, group: index % 4, size: kind === 1 ? 0.65 + random() * 0.7 : 0.32 + random() * 0.58 }));
+    members.forEach((fish, index) => { fish.mesh = mesh; fish.index = index; fish.alive = true; });
     mesh.geometry.setAttribute('schoolPhase', new THREE.InstancedBufferAttribute(new Float32Array(members.map(fish => fish.phase)), 1));
     meshes.push(mesh); paths.push(members); root.add(mesh);
   }
   const transform = new THREE.Object3D(); const position = new THREE.Vector3();
-  return { root, count: 565, animate(clock, anchor, camera, predator, delta) {
+  return { root, count: 565, members: paths.flat(), animate(clock, anchor, camera, predators, delta, collisions) {
     meshes.forEach((mesh, kind) => {
       paths[kind].forEach((fish, index) => {
         const centers = [[-39, 19, 88], [48, 28, 18], [-6, 56, -69], [45, 11, 105]];
         const center = centers[fish.group]; const angle = fish.phase + clock * (kind === 1 ? 0.09 : 0.13);
         position.set(anchor[0] + center[0] + Math.cos(angle) * fish.radius * 1.4, anchor[1] + center[1] + fish.height + Math.sin(clock * 0.7 + fish.phase), anchor[2] + center[2] + Math.sin(angle) * fish.radius);
-        const fleeing = avoidPosition(avoidPosition(position.toArray(), camera, 18, fish.phase), predator, 23, fish.phase);
+        const fleeing = predators.reduce((point, predator) => avoidPosition(point, predator, 16, fish.phase), avoidPosition(position.toArray(), camera, 18, fish.phase));
         position.fromArray(fleeing);
         const tangent = Math.atan2(Math.sin(angle) * 1.4, -Math.cos(angle));
         if (!fish.position || fish.position.distanceToSquared(position) > 100000) { fish.position = position.clone(); fish.heading = tangent; }
         if (delta > 0) {
           const horizontal = position.x - fish.position.x; const depth = position.z - fish.position.z;
           const heading = horizontal * horizontal + depth * depth > 0.002 ? Math.atan2(-horizontal, -depth) : tangent;
-          fish.heading = dampAngle(fish.heading, heading, 3, delta); fish.position.lerp(position, 1 - Math.exp(-delta * 5));
+          fish.heading = dampAngle(fish.heading, heading, 3, delta);
+          let next = fish.position.clone().lerp(position, 1 - Math.exp(-delta * 5));
+          if (collisions) next = collisions.avoidSmall(next, fish.size * 1.2);
+          fish.position.copy(collisions ? collisions.move(fish.position, next, { radius: fish.size * 1.2, dynamic: false }) : next);
         }
-        transform.position.copy(fish.position); transform.rotation.set(0, fish.heading, Math.sin(clock * 2 + fish.phase) * 0.05); transform.scale.setScalar(fish.size); transform.updateMatrix(); mesh.setMatrixAt(index, transform.matrix);
+        transform.position.copy(fish.position); transform.rotation.set(0, fish.heading, Math.sin(clock * 2 + fish.phase) * 0.05); transform.scale.setScalar(fish.alive ? fish.size : 0); transform.updateMatrix(); mesh.setMatrixAt(index, transform.matrix);
       });
       mesh.instanceMatrix.needsUpdate = true;
     });
@@ -215,6 +222,7 @@ export class OceanEcology {
     this.time = { value: 0 }; this.templates = [379, 571, 887].map(seed => reefTemplate(seed, this.time));
     this.patches = new Map(); this.pool = []; this.anchor = [0, 0, 0]; this.cell = null; this.lastTime = 0;
     this.schools = schools(this.time); this.root.add(this.schools.root);
+    this.foodWeb = new FoodWeb(); this.protectedActor = null;
     this.ancient = createAncientFish(); this.ancient.root.scale.setScalar(1.85); this.ancient.root.rotation.y = -Math.PI / 2; this.root.add(this.ancient.root);
     this.animals = [];
     for (let index = 0; index < 3; index++) this.animals.push({ ...createShark(), kind: 'shark', index });
@@ -227,6 +235,9 @@ export class OceanEcology {
   }
 
   update(position, offset, time, delta) {
+    this.root.position.copy(offset).multiplyScalar(-1);
+    if (this.initialized && delta === 0 && time === this.lastTime) return;
+    this.initialized = true;
     this.time.value = time; this.lastTime = time; this.root.position.copy(offset).multiplyScalar(-1);
     const landmark = localLandmark(position.toArray());
     const cell = landmark?.id || `${Math.floor(position.x / CELL)}:${Math.floor(position.z / CELL)}`;
@@ -261,7 +272,8 @@ export class OceanEcology {
     this.ancient.root.position.set(centerX + 11 + Math.sin(time * 0.045) * 22, floor + 29 + Math.sin(time * 0.12) * 1.7, centerZ + 25 + Math.cos(time * 0.045) * 11);
     const ancientHeading = Math.atan2(-22 * Math.cos(time * 0.045), 11 * Math.sin(time * 0.045));
     this.ancient.root.rotation.set(0.018, dampAngle(this.ancient.root.rotation.y, ancientHeading, 0.8, delta), Math.sin(time * 0.08) * 0.022);
-    this.schools.animate(time, this.anchor, position.toArray(), this.ancient.root.visible ? this.ancient.root.position.toArray() : [1e8, 1e8, 1e8], delta);
+    const predators = this.animals.filter(animal => animal.kind === 'shark');
+    this.schools.animate(time, this.anchor, position.toArray(), predators.filter(animal => animal.root.visible).map(animal => animal.root.position.toArray()), delta, this.collisions);
     if (delta > 0) this.ancient.animate(time);
     for (const animal of this.animals) {
       const { root, kind, index } = animal;
@@ -278,14 +290,15 @@ export class OceanEcology {
         root.position.set(centerX + 44 + Math.cos(phase) * 19, floor + 11 + index * 3.4 + Math.sin(phase) * 2, centerZ + 64 - index * 11);
         root.rotation.set(0, -1 + Math.sin(phase) * 0.3, Math.sin(phase * 2) * 0.08); root.scale.setScalar(1.15);
       } else {
-        root.position.set(-50 + Math.sin(time * 0.08) * 2, 19 + Math.sin(time * 0.3), 15);
-        root.rotation.y = -2.6;
+        root.position.set(-50 + Math.sin(time * 0.12) * 15, 23 + Math.sin(time * 0.22) * 4, 15 + Math.cos(time * 0.12) * 12);
+        root.rotation.y = dampAngle(root.rotation.y, Math.atan2(-Math.cos(time * 0.12)*15, Math.sin(time * 0.12)*12), 1.4, delta);
       }
       if (delta > 0) animal.animate(time * 0.8);
     }
+    this.foodWeb.update(delta, predators, this.schools.members, this.protectedActor, position, this.collisions);
   }
 
   inspect() {
-    return { habitat: this.activeHabitat, patches: this.patches.size, pooled: this.pool.length, schoolingFish: this.schools.count, species: ['装甲古鱼（幻想）', '灰礁鲨', '海龟', '鹦鹉螺', '礁鱼', '蝶鱼', '拟花鲈', '海星', '神话人鱼'], time: this.lastTime, ancient: { visible: this.ancient.root.visible, position: this.ancient.root.position.toArray() }, animals: this.animals.filter(animal => animal.root.visible).map(animal => ({ kind: animal.kind, position: animal.root.position.toArray() })), reactions: ['camera-avoidance', 'giant-fish-avoidance'] };
+    return { habitat: this.activeHabitat, patches: this.patches.size, pooled: this.pool.length, schoolingFish: this.foodWeb.inspect(this.schools.members).living, foodWeb: this.foodWeb.inspect(this.schools.members), species: ['装甲古鱼（幻想）', '灰礁鲨', '海龟', '鹦鹉螺', '礁鱼', '蝶鱼', '拟花鲈', '海星', '神话人鱼'], time: this.lastTime, ancient: { visible: this.ancient.root.visible, position: this.ancient.root.position.toArray() }, animals: this.animals.filter(animal => animal.root.visible).map(animal => ({ kind: animal.kind, position: animal.root.position.toArray() })), reactions: ['camera-avoidance', 'shark-pursuit', 'school-evasion', 'satiation', 'limited-immigration'] };
   }
 }

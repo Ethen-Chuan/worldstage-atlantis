@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "file": "mermaid-song.mp3",
+      "source": "https://upload.wikimedia.org/wikipedia/commons/3/33/Giorgi_Latsabidze_Ariettes_Oubli%C3%A9es_6.ogg",
+      "sha256": "38d68e091f14389ac7d74154bd3d1dd42054527b05bb8e79e1884bd08686da04",
+      "title": "Ariettes oubliées VI — Spleen",
+      "credits": "Claude Debussy, music; Paul Verlaine, French text; Xiaobo Su, soprano; Giorgi Latsabidze, piano; USC live performance, 2010",
+      "license": "Recording released into public domain by uploader/copyright holder, Commons PD-self declaration",
+      "licenseSource": "https://commons.wikimedia.org/wiki/File:Giorgi_Latsabidze_Ariettes_Oubli%C3%A9es_6.ogg",
+      "processing": "metadata removed; excerpt; loudness normalization; in-world spatial mix",
+      "filter": "highpass=f=45,loudnorm=I=-20:TP=-2:LRA=11",
+      "duration": 78
+    },
+    {
+      "file": "distant-whale.mp3",
+      "source": "https://www.pmel.noaa.gov/acoustics/whales/sounds/whalewav/akhumphi1x.wav",
+      "sha256": "9109763607c65ff83f3185d3ca1831817104dde5d3ea1685b25bfb54f947580d",
+      "title": "Alaska humpback whale calls, winter 1999",
+      "credits": "NOAA Pacific Marine Environmental Laboratory, Acoustics Program",
+      "license": "US federal government work; Commons PD-USGov-NOAA attribution",
+      "licenseSource": "https://commons.wikimedia.org/wiki/File:Akhumphi1x.ogg",
+      "processing": "NOAA source page states 10x accelerated; sample rate reduced by factor 10 before resampling; filtered, normalized excerpt and spatial mix; not an acoustic research reconstruction",
+      "filter": "asetrate=800,aresample=32000,highpass=f=25,loudnorm=I=-22:TP=-3:LRA=9",
+      "duration": 48
+    }
+  ]
+}

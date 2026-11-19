@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { ASSETS, LIVING_ASSETS } from './creation.js';
 import { seaHeight } from './terrain.js';
 import { dampAngle } from './swim.js';
+import { actorHull } from './collision-world.js';
 
 export function embodimentMarkup() {
-  return `<section id="inhabit-controls" class="inhabit-controls" aria-label="代入视角控制" hidden><div><span class="eyebrow" id="inhabit-mode"></span><strong id="inhabit-title"></strong><p id="inhabit-help"></p></div><div class="inhabit-actions"><button id="inhabit-view">切换第三人称</button><button id="inhabit-speak" aria-expanded="false">对世界说话</button><button id="inhabit-exit">返回自由探索 <small>Esc</small></button></div></section><div id="swim-pad" class="swim-pad" aria-label="触屏移动" hidden><button data-swim="up" aria-label="上浮">升</button><button data-swim="forward" aria-label="向前游">↑</button><button data-swim="down" aria-label="下潜">降</button><button data-swim="left" aria-label="向左游">←</button><button data-swim="back" aria-label="向后游">↓</button><button data-swim="right" aria-label="向右游">→</button></div>`;
+  return `<section id="inhabit-controls" class="inhabit-controls" aria-label="代入视角控制" hidden><div><span class="eyebrow" id="inhabit-mode"></span><strong id="inhabit-title"></strong><p id="inhabit-help"></p></div><div class="inhabit-actions"><button id="inhabit-view">切换第三人称</button><button id="inhabit-speak" aria-expanded="false">对世界说话</button><button id="inhabit-trial">以当前生物探索</button><button id="inhabit-exit">返回自由探索 <small>Esc</small></button></div></section><div id="swim-pad" class="swim-pad" aria-label="触屏移动" hidden><button data-swim="up" aria-label="上浮">升</button><button data-swim="forward" aria-label="向前游">↑</button><button data-swim="down" aria-label="下潜">降</button><button data-swim="left" aria-label="向左游">←</button><button data-swim="back" aria-label="向后游">↓</button><button data-swim="right" aria-label="向右游">→</button></div>`;
 }
 
 function visible(object) {
@@ -20,7 +21,7 @@ export class Embodiment {
     canvas.addEventListener('pointerdown', event => { if (this.active?.living && this.firstPerson && event.button === 0 && event.isPrimary) { this.drag = [event.clientX, event.clientY, event.pointerId]; canvas.setPointerCapture(event.pointerId); } });
     canvas.addEventListener('pointermove', event => {
       if (!this.drag || this.drag[2] !== event.pointerId || !this.firstPerson || !this.active) return;
-      this.heading -= (event.clientX - this.drag[0]) * 0.004;
+      this.desiredHeading = (this.desiredHeading ?? this.heading) - (event.clientX - this.drag[0]) * 0.004;
       this.pitch = THREE.MathUtils.clamp(this.pitch - (event.clientY - this.drag[1]) * 0.003, -0.85, 0.85);
       this.drag = [event.clientX, event.clientY, event.pointerId];
     });
@@ -29,8 +30,13 @@ export class Embodiment {
   }
 
   pick(raycaster) {
+    this.candidate = null;
     const roots = [this.ocean.city, this.ocean.creationScene.root, this.ocean.ecology.root, ...Object.values(this.ocean.creatures || {}).map(creature => creature.root), ...this.ocean.landmarks.entries.map(entry => entry.root), ...[...this.ocean.wonders.entries.values()].map(entry => entry.root), ...[...this.ocean.endless.chunks.values()].map(tile => tile.ground)].filter(Boolean);
-    const hit = raycaster.intersectObjects(roots, true).find(hit => hit.distance < 850 && hit.object.isMesh && visible(hit.object) && !hit.object.userData.noPick);
+    const hit = raycaster.intersectObjects(roots, true).find(hit => {
+      if (hit.distance >= 850 || !hit.object.isMesh || !visible(hit.object)) return false;
+      for (let ancestor = hit.object; ancestor; ancestor = ancestor.parent) if (ancestor === this.active?.root) return false;
+      return true;
+    });
     if (!hit) return null;
     let ancestor = hit.object; let creature = null; let authored = null;
     while (ancestor && ancestor !== this.ocean.scene) {
@@ -73,6 +79,9 @@ export class Embodiment {
     this.radius = target.living ? THREE.MathUtils.clamp(size.length() * 0.52, 4, 65) : THREE.MathUtils.clamp(size.length() * 0.1, 14, 70);
     this.position = target.living ? target.root.getWorldPosition(new THREE.Vector3()).add(this.ocean.worldOffset) : target.point.clone();
     this.heading = target.shape?.rotation.y || 0;
+    this.desiredHeading = null;
+    this.collisionHull = target.living ? actorHull(target) : null;
+    if (target.living && this.ocean.collisions) this.position.copy(this.ocean.collisions.move(this.position, this.position, { hull: this.collisionHull, ignore: target.root }));
     this.pitch = 0;
     this.ocean.travelTarget = null; this.ocean.cruising = false; this.ocean.movement.clear(); this.ocean.navigationVelocity.set(0, 0, 0);
     const behind = new THREE.Vector3(0, this.radius * 0.38 + 3, this.radius * 1.85).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
@@ -131,6 +140,12 @@ export class Embodiment {
       release.root.position.copy(release.root.parent.worldToLocal(position));
       const rotation = new THREE.Quaternion().slerp(release.rotation, weight);
       release.shape.quaternion.premultiply(rotation);
+      if (this.ocean.collisions) {
+        const desired = release.root.getWorldPosition(new THREE.Vector3()).add(this.ocean.worldOffset);
+        const safe = this.ocean.collisions.move(release.safePosition || desired, desired, { hull: actorHull(release), ignore: release.root });
+        release.root.position.copy(release.root.parent.worldToLocal(safe.clone().sub(this.ocean.worldOffset))); release.safePosition = safe;
+        this.ocean.collisions.remember(release, safe);
+      }
       if (fraction === 1) this.releases.splice(index, 1);
     }
     const target = this.active; if (!target) return;
@@ -154,6 +169,12 @@ export class Embodiment {
     }
     if (!target.living) { this.ocean.controls.target.copy(this.position).sub(this.ocean.worldOffset); return; }
     const previous = this.position.clone();
+    if (this.desiredHeading != null) {
+      const difference = Math.atan2(Math.sin(this.desiredHeading - this.heading), Math.cos(this.desiredHeading - this.heading));
+      const turnRate = target.species === 'whale' ? 0.65 : 1.8;
+      this.heading += THREE.MathUtils.clamp(difference, -turnRate * delta, turnRate * delta);
+      if (Math.abs(difference) < 0.001) this.desiredHeading = null;
+    }
     const forward = this.firstPerson ? new THREE.Vector3(-Math.sin(this.heading), 0, -Math.cos(this.heading)) : this.ocean.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
     const right = new THREE.Vector3(-forward.z, 0, forward.x);
     const desired = new THREE.Vector3(); const keys = this.ocean.movement;
@@ -163,6 +184,15 @@ export class Embodiment {
     const speed = target.species === 'whale' ? 25 : target.species === 'turtle' ? 17 : 32;
     if (desired.lengthSq() > 1) desired.normalize(); desired.multiplyScalar(speed * (keys.has('fast') ? 1.8 : 1));
     this.velocity.lerp(desired, 1 - Math.exp(-delta * 3.5)); this.position.addScaledVector(this.velocity, delta);
+    if (this.ocean.collisions) {
+      target.shape.rotation.y = this.heading;
+      const hull = actorHull(target);
+      const safe = this.ocean.collisions.move(previous, this.position, { hull, previousHull: this.collisionHull || hull, ignore: target.root });
+      if (safe.distanceTo(this.position) > 0.05) this.velocity.multiplyScalar(0.35);
+      this.position.copy(safe);
+      this.collisionHull = hull;
+      this.ocean.collisions.remember(target, safe);
+    }
     this.position.y = Math.max(seaHeight(this.position.x, this.position.z) + Math.min(this.radius * 0.25, 12) + 3, this.position.y);
     if (!this.firstPerson && Math.hypot(this.velocity.x, this.velocity.z) > 0.2) this.heading = dampAngle(this.heading, Math.atan2(-this.velocity.x, -this.velocity.z), 2, delta);
     const local = this.position.clone().sub(this.ocean.worldOffset); target.root.parent.updateWorldMatrix(true, false);
@@ -190,7 +220,7 @@ export class Embodiment {
     }
     if (target.living && target.naturalPosition && !target.temporary) {
       const offset = this.position.clone().sub(target.naturalPosition);
-      this.releases.push({ root: target.root, shape: target.shape, basePosition: target.naturalLocalPosition, baseRotation: target.naturalRotation, offset, rotation: target.shape.quaternion.clone().multiply(target.naturalRotation.clone().invert()), elapsed: 0, duration: Math.max(6, Math.min(28, offset.length() / 14)) });
+      this.releases.push({ root: target.root, shape: target.shape, species: target.species, safePosition: this.position.clone(), basePosition: target.naturalLocalPosition, baseRotation: target.naturalRotation, offset, rotation: target.shape.quaternion.clone().multiply(target.naturalRotation.clone().invert()), elapsed: 0, duration: Math.max(6, Math.min(28, offset.length() / 14)) });
     }
     if (target.disposable) this.releases.push({ root: target.root, source: target.source, instance: target.instance, sourceMatrix: target.sourceMatrix, origin: this.position.clone(), elapsed: 0, duration: 8 });
     this.active = null; this.blend = null; this.drag = null; this.ocean.controls.enabled = true; this.ocean.controls.autoRotate = false; this.ocean.movement.clear(); this.clearOrbitMomentum();

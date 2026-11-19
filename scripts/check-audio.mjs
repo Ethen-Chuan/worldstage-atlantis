@@ -6,3 +6,8 @@ for (const sample of manifest.samples) {
   catch { throw new Error(`Missing orchestral sample ${sample.file}. Run npm run audio:prepare first (requires FFmpeg and network access).`); }
 }
 console.log(`Orchestral assets ready: ${manifest.samples.length} samples.`);
+for (const file of ['mermaid-song.mp3', 'distant-whale.mp3']) {
+  try { await fs.access(new URL(`../public/audio/voices/${file}`, import.meta.url)); }
+  catch { throw new Error(`Missing creature voice ${file}. Run npm run audio:voices first.`); }
+}
+console.log('Lyrical song and recorded whale assets ready.');

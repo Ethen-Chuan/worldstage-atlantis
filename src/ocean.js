@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { SceneTap } from './scene-tap.js';
+import { WhaleFall } from './whale-fall.js';
+import { CollisionWorld } from './collision-world.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -24,6 +26,7 @@ import { PLACES, REGIONS, EVENTS } from './world.js';
 import { clamp } from './core.js';
 import { Embodiment } from './embodiment.js';
 import { TidePlay } from './tide-play.js';
+import { LIVING_ASSETS } from './creation.js';
 
 class OceanOcclusionPass extends GTAOPass {
   render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
@@ -72,6 +75,7 @@ export class Ocean {
     this.worldOffset = new THREE.Vector3();
     this.movement = new Set();
     this.navigationVelocity = new THREE.Vector3();
+    this.collisions = new CollisionWorld();
     this.cruising = false;
     this.travelTarget = null;
     this.uniforms = { time: { value: 0 }, offset: { value: this.worldOffset }, night: { value: 0 }, skyTop: { value: new THREE.Color().setRGB(0.075, 0.29, 0.32) }, skyBottom: { value: new THREE.Color().setRGB(0.012, 0.04, 0.055) }, skySun: { value: 1 } };
@@ -142,7 +146,7 @@ export class Ocean {
     this.creatures = { manta: createManta(), whale: createWhale(), jelly: createJellies() };
     Object.values(this.creatures).forEach(creature => this.scene.add(creature.root));
     Object.values(this.creatures).forEach(creature => { creature.root.visible = false; });
-    this.updateFish = createSchools(this.city);
+    this.updateFish = createSchools(this.city, this.collisions);
     const renderTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
     this.composer = new EffectComposer(this.renderer, renderTarget);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -216,6 +220,7 @@ export class Ocean {
     this.lastFrame = performance.now();
     this.embodiment = new Embodiment(this);
     this.play = new TidePlay(this, callbacks.sound || { ritual() {}, note() {}, setIntensity() {}, stopChant() {} });
+    this.whaleFall = new WhaleFall(this, callbacks.sound);
     this.lastUI = 0;
     this.frames = 0;
     this.frameStart = performance.now();
@@ -341,6 +346,11 @@ export class Ocean {
     }
     this.navigationVelocity.lerp(velocity, 1 - Math.exp(-delta * 8));
     velocity.copy(this.navigationVelocity).multiplyScalar(delta); this.camera.position.add(velocity); this.controls.target.add(velocity);
+    if (!this.embodiment?.active && global.distanceToSquared(this.worldPosition()) > 0) {
+      const desired = this.worldPosition(); const safe = this.collisions.move(global, desired, { radius: 2 });
+      const correction = safe.sub(desired); this.camera.position.add(correction); this.controls.target.add(correction);
+      if (this.travelTarget && correction.lengthSq() > 0.25) { this.travelTarget = null; this.callbacks.onError?.('前方有实体阻挡，已停下航行；可以上浮绕行，或在海图选择快速抵达。'); }
+    }
     const arrived = this.worldPosition();
     const floor = seaHeight(arrived.x, arrived.z) + 5 - this.worldOffset.y;
     if (this.camera.position.y < floor) { const correction = floor - this.camera.position.y; this.camera.position.y += correction; this.controls.target.y += correction; }
@@ -356,7 +366,10 @@ export class Ocean {
     this.currentBiome = this.endless.update(this.worldPosition(), this.worldOffset, this.time);
     this.currentLandmark = localLandmark(arrived.toArray());
     this.landmarks.update(arrived, this.worldOffset, this.time, delta);
+    this.wonders.collisions = this.collisions;
     this.wonders.update(arrived, this.worldOffset, this.time, delta);
+    this.ecology.protectedActor = this.embodiment?.active;
+    this.ecology.collisions = this.collisions;
     this.ecology.update(arrived, this.worldOffset, this.time, delta);
     const lightCenter = this.camera.position.clone();
     this.sun.position.copy(lightCenter).add(new THREE.Vector3(-35, 230, -70)); this.sun.target.position.copy(lightCenter).add(new THREE.Vector3(0, -20, -120));
@@ -528,7 +541,7 @@ export class Ocean {
     const ambientNocturne = this.currentLandmark?.nocturne ?? (this.currentLandmark?.id === 'choir' ? 1 : this.currentBiome?.id === 'garden' ? 0.55 : 0);
     const ceremonyAge = this.play?.show ? this.time - this.play.show.start : -1;
     const ceremonyFade = this.play?.show?.ending != null ? 1 - THREE.MathUtils.smoothstep(this.time - this.play.show.ending, 0, 2.5) : 1;
-    const ceremonyShade = ceremonyAge >= 0 ? THREE.MathUtils.smoothstep(ceremonyAge, 0, 5) * (1 - THREE.MathUtils.smoothstep(ceremonyAge, 28, 36)) * 0.86 * ceremonyFade : 0;
+    const ceremonyShade = ceremonyAge >= 0 ? THREE.MathUtils.smoothstep(ceremonyAge, 0, 5) * (1 - THREE.MathUtils.smoothstep(ceremonyAge, 28, 36)) * 0.16 * ceremonyFade : 0;
     const nocturne = Math.max(ambientNocturne, ceremonyShade);
     const transition = this.instantLighting ? 1 : 1 - Math.exp(-realDelta * 0.7);
     this.instantLighting = false;
@@ -576,9 +589,35 @@ export class Ocean {
         }
       }
     }
+    const active = this.embodiment.active;
+    const actors = [...this.creationScene.objects.values()].filter(entry => LIVING_ASSETS.includes(entry.item.asset) && !['shoal', 'jelly'].includes(entry.item.asset)).map(entry => ({ root: entry.root, shape: entry.shape, species: entry.item.asset, entry }));
+    for (const animal of this.ecology.animals) actors.push({ root: animal.root, shape: animal.root, species: animal.kind });
+    actors.push({ root: this.ecology.ancient.root, shape: this.ecology.ancient.root, species: 'ancient' });
+    for (const [species, animal] of Object.entries(this.creatures)) actors.push({ root: animal.root, shape: animal.root, species });
+    for (const entry of [...this.landmarks.entries, ...this.wonders.entries.values()]) entry.root.traverseVisible(root => {
+      if (root.userData.creature && !root.isInstancedMesh) actors.push({ root, shape: root, species: root.userData.creature });
+    });
+    if (active?.living && !actors.some(actor => actor.root === active.root)) actors.push(active);
+    if (this.whaleFall.active && this.whaleFall.whale.root.visible) actors.push({ root: this.whaleFall.whale.root, species: 'whale', kinematic: true });
+    this.collisions.rebuild([this.city, this.creationScene.root, this.ecology.root, ...this.landmarks.entries.map(entry => entry.root), ...[...this.wonders.entries.values()].map(entry => entry.root), ...[...this.endless.chunks.values()].map(entry => entry.root)], this.worldOffset);
+    this.collisions.beginBodies(actors, this.worldOffset, active ? { ...active, position: this.embodiment.position, hull: this.embodiment.collisionHull } : null);
+    for (const actor of actors) {
+      if (actor.kinematic || active?.root === actor.root || active?.root === actor.shape) continue;
+      const safe = this.collisions.natural(actor, this.worldOffset, delta);
+      if (safe && actor.entry) { actor.entry.followPosition.copy(safe); actor.entry.followPosition.y -= actor.entry.currentHeight; }
+      const predator = this.ecology.foodWeb.predators.get(actor.root);
+      if (safe && predator) predator.position.copy(actor.root.position);
+    }
     this.embodiment.update(delta);
     this.play.update(delta);
+    this.whaleFall.update(delta);
+    const beforeOrbit = this.worldPosition();
     if (!this.paused) this.controls.update(delta);
+    if (!this.embodiment.blend && (!active?.living || !this.embodiment.firstPerson)) {
+      const desired = this.worldPosition();
+      const safe = this.collisions.move(beforeOrbit, desired, { radius: 1.2, ignore: active?.root });
+      this.camera.position.copy(safe).sub(this.worldOffset);
+    }
     this.renderer.info.reset();
     this.composer.render();
     this.frames++;
@@ -609,6 +648,6 @@ export class Ocean {
   }
 
   inspect() {
-    return { time: this.time, paused: this.paused, selected: this.selected, night: this.uniforms.night.value, flight: this.flight?.name || null, location: this.location, region: this.region, speed: this.speed, distances: { ...this.distances }, world: this.biomes?.inspect() || { region: 'city', events: {} }, ecology: this.ecology.inspect(), wonders: this.wonders.inspect(), creation: this.creationScene.inspect(), quality: this.quality, pixelRatio: this.renderer.getPixelRatio(), camera: this.camera.position.toArray(), creatures: Object.fromEntries(Object.entries(this.creatures).map(([key, value]) => [key, { position: value.root.position.toArray(), mode: value.root.userData.mode }])), drawCalls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, memory: { ...this.renderer.info.memory }, fps: this.lastFPS || null };
+    return { collisions: this.collisions.inspect(), whaleFall: this.whaleFall.inspect(), time: this.time, paused: this.paused, selected: this.selected, night: this.uniforms.night.value, flight: this.flight?.name || null, location: this.location, region: this.region, speed: this.speed, distances: { ...this.distances }, world: this.biomes?.inspect() || { region: 'city', events: {} }, ecology: this.ecology.inspect(), wonders: this.wonders.inspect(), creation: this.creationScene.inspect(), quality: this.quality, pixelRatio: this.renderer.getPixelRatio(), camera: this.camera.position.toArray(), creatures: Object.fromEntries(Object.entries(this.creatures).map(([key, value]) => [key, { position: value.root.position.toArray(), mode: value.root.userData.mode }])), drawCalls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, memory: { ...this.renderer.info.memory }, fps: this.lastFPS || null };
   }
 }
