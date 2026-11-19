@@ -4,9 +4,7 @@ import { seaHeight } from './terrain.js';
 import { dampAngle } from './swim.js';
 import { actorHull } from './collision-world.js';
 
-export function embodimentMarkup() {
-  return `<section id="inhabit-controls" class="inhabit-controls" aria-label="代入视角控制" hidden><div><span class="eyebrow" id="inhabit-mode"></span><strong id="inhabit-title"></strong><p id="inhabit-help"></p></div><div class="inhabit-actions"><button id="inhabit-view">切换第三人称</button><button id="inhabit-speak" aria-expanded="false">对世界说话</button><button id="inhabit-trial">以当前生物探索</button><button id="inhabit-exit">返回自由探索 <small>Esc</small></button></div></section><div id="swim-pad" class="swim-pad" aria-label="触屏移动" hidden><button data-swim="up" aria-label="上浮">升</button><button data-swim="forward" aria-label="向前游">↑</button><button data-swim="down" aria-label="下潜">降</button><button data-swim="left" aria-label="向左转向">↶</button><button data-swim="back" aria-label="向后游">↓</button><button data-swim="right" aria-label="向右转向">↷</button></div>`;
-}
+export { embodimentMarkup } from './world-interface.js';
 
 function visible(object) {
   for (let current = object; current; current = current.parent) if (!current.visible || current.userData.noPick) return false;

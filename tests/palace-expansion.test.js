@@ -18,7 +18,7 @@ test('palace rooms load near the observer, with actual doors and collision-safe 
   assert.ok(palace.rooms.size < PALACE_ROOMS.length);
   for (const room of PALACE_ROOMS) palace.update(global(room.view), offset);
   for (const room of palace.rooms.values()) room.visible = true;
-  assert.equal(palace.rooms.size, 5);
+  assert.equal(palace.rooms.size, PALACE_ROOMS.length);
   const collision = new CollisionWorld({ floor: () => palace.base - 12 }); collision.rebuild([palace.root]);
   const locations = [entry, ...PALACE_ROOMS.map(room => global(room.view))];
   for (const origin of locations) for (const destination of [...PALACE_ROOMS.map(room => room.id), 'exit']) {
@@ -38,7 +38,7 @@ test('palace rooms load near the observer, with actual doors and collision-safe 
 
 test('room commands are validated and never interpreted as arbitrary actions', () => {
   const position = [-610, 0, 600];
-  for (const command of ['进入城堡', '去客厅', '前往宴会厅', '去寝宫', '去会所', '退出宫殿']) {
+  for (const command of ['进入城堡', '去客厅', '前往宴会厅', '去寝宫', '去会所', '去花园', '进入潮汐内花园', '去餐厅', '前往珊瑚餐厅', '退出宫殿']) {
     const plan = planWorld(command); assert.equal(plan.kind, 'palace-room'); assert.ok(validateWorldPlan(plan, { position }));
   }
   assert.throws(() => validateWorldPlan(worldAction('palace-room', { room: '../secret' }), { position }));

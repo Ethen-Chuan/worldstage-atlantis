@@ -7,6 +7,9 @@ export function setupViewport({ closePanels, toast }) {
   const root = document.documentElement;
   const compact = matchMedia('(max-width: 1100px), (max-height: 600px)');
   const content = document.querySelector('#tools-content');
+  const inhabitControls = document.querySelector('#inhabit-controls');
+  const controlsObserver = new ResizeObserver(() => root.style.setProperty('--inhabit-height', `${Math.ceil(inhabitControls.getBoundingClientRect().height)}px`));
+  controlsObserver.observe(inhabitControls);
   const movable = ['.world-tools', '.site-play', '.ai-view-button', '.composer-topline', '.capture-tools'].map(selector => {
     const element = document.querySelector(selector);
     const marker = document.createTextNode(''); element.before(marker);

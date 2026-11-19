@@ -30,6 +30,7 @@ import { LIVING_ASSETS } from './creation.js';
 import { PalaceDistrict } from './palace-district.js';
 import { travelGaze } from './travel-gaze.js';
 import { SunsetSea } from './sunset-sea.js';
+import { FrameBudget } from './frame-budget.js';
 
 class OceanOcclusionPass extends GTAOPass {
   render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
@@ -74,6 +75,7 @@ export class Ocean {
     this.speed = 1;
     this.distances = { manta: 1, whale: 1, jelly: 1 };
     this.quality = 'balanced';
+    this.frameBudget = new FrameBudget();
     this.pulses = [];
     this.worldOffset = new THREE.Vector3();
     this.movement = new Set();
@@ -158,7 +160,7 @@ export class Ocean {
     this.composer = new EffectComposer(this.renderer, renderTarget);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.occlusion = new OceanOcclusionPass(this.scene, this.camera, 1, 1);
-    this.occlusion.updateGtaoMaterial({ radius: 5.5, distanceExponent: 1.2, thickness: 1.7, distanceFallOff: 0.7, samples: 16, screenSpaceRadius: false });
+    this.occlusion.updateGtaoMaterial({ radius: 5.5, distanceExponent: 1.2, thickness: 1.7, distanceFallOff: 0.7, samples: 12, screenSpaceRadius: false });
     this.occlusion.blendIntensity = 0.48;
     this.composer.addPass(this.occlusion);
     this.scattering = waterScatteringPass(this.camera, this.uniforms, this.occlusion.depthTexture);
@@ -246,7 +248,7 @@ export class Ocean {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
     this.composer.setSize(width, height);
-    this.occlusion.setSize(Math.round(width * 0.55), Math.round(height * 0.55));
+    this.occlusion.setSize(Math.round(width * 0.55 * this.frameBudget.scale), Math.round(height * 0.55 * this.frameBudget.scale));
     this.occlusion.lastView = null;
     this.antialias.uniforms.resolution.value.set(1 / (width * this.renderer.getPixelRatio()), 1 / (height * this.renderer.getPixelRatio()));
   }
@@ -254,11 +256,22 @@ export class Ocean {
   setQuality(quality) {
     if (!['high', 'balanced', 'performance'].includes(quality)) return;
     this.quality = quality;
-    const ratio = quality === 'high' ? Math.min(Math.max(devicePixelRatio, 1.25), 1.75) : quality === 'balanced' ? 1 : 0.85;
-    this.renderer.setPixelRatio(ratio);
-    this.composer.setPixelRatio(ratio);
+    this.frameBudget.configure(this.frameBudget.enabled, performance.now());
     this.occlusion.blendIntensity = quality === 'performance' ? 0.25 : 0.48;
     this.occlusion.updateGtaoMaterial({ samples: quality === 'high' ? 24 : quality === 'balanced' ? 12 : 6 });
+    this.applyResolution();
+  }
+
+  setAdaptive(enabled) {
+    this.frameBudget.configure(Boolean(enabled), performance.now());
+    this.applyResolution();
+  }
+
+  applyResolution() {
+    const base = this.quality === 'high' ? Math.min(Math.max(devicePixelRatio, 1.25), 1.75) : this.quality === 'balanced' ? 1 : 0.85;
+    const ratio = base * this.frameBudget.scale;
+    this.renderer.setPixelRatio(ratio);
+    this.composer.setPixelRatio(ratio);
     this.resize();
   }
 
@@ -558,9 +571,10 @@ export class Ocean {
   }
 
   loop(now) {
+    const frameMilliseconds = now - this.lastFrame;
     const realDelta = Math.max(0, Math.min((now - this.lastFrame) / 1000, 0.25));
     this.lastFrame = now;
-    if (document.hidden) return;
+    if (document.hidden) { this.frameBudget.reset(now); this.frames = 0; this.frameStart = now; return; }
     const delta = this.paused ? 0 : realDelta * (this.reduced ? 0.5 : 1);
     this.time += delta;
     this.lifeTime += delta * this.speed;
@@ -658,6 +672,7 @@ export class Ocean {
     }
     this.renderer.info.reset();
     this.composer.render();
+    if (this.frameBudget.sample(frameMilliseconds, now, !this.paused && !this.travelTarget && !this.flight && !this.embodiment.blend && !this.palaceRoute)) this.applyResolution();
     this.frames++;
     if (now - this.lastUI > 120) {
       const position = this.creatures[this.selected].root.position.clone().add(new THREE.Vector3(0, this.selected === 'whale' ? 7 : 2.4, 0));

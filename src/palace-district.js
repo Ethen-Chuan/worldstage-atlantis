@@ -3,18 +3,17 @@ import { seaHeight } from './terrain.js';
 import { PalaceWorkshop, palaceMaterials, beam, column, moldingFrame, shellCrest } from './palace-craft.js';
 import { decorateRoom } from './palace-ornaments.js';
 import { buildSanctuary, sanctuaryMaterials } from './palace-sanctuary.js';
+import { livingSpaceMaterials, furnishLivingSpace, gardenRoof, furnishStoryArtifact } from './palace-living-spaces.js';
 
-export const PALACE_CENTER = [-610, 0, 440];
-export const PALACE_ROOMS = Object.freeze([
-  { id: 'reception', name: '珍珠接待厅', center: [0, 26], view: [0, 8, 43], target: [0, 12, 3], description: '双列雕饰石柱、贝冠门楣、珍珠垂饰与潮汐石拼花。' },
-  { id: 'salon', name: '蓝绒客厅', center: [-35, -27], view: [-19, 7, -19], target: [-43, 7, -30], description: '绗缝蓝绒沙发、雕脚石案、贝瓷茶壶与镶金藏书柜。' },
-  { id: 'banquet', name: '金枝宴会厅', center: [35, -27], view: [18, 9, -13], target: [37, 7, -32], description: '十二席织锦长桌、珠光树灯、双层餐盘与折叠餐巾。' },
-  { id: 'bedroom', name: '月贝寝宫', center: [-35, -81], lamp: [-27, -68], view: [-18, 8, -65], target: [-43, 8, -86], description: '贝冠雕花床头、褶皱帷幔、鎏金床柱与梳妆器物。' },
-  { id: 'club', name: '观海会所', center: [35, -81], view: [18, 7, -72], target: [43, 7, -87], description: '珐琅酒柜、雕花会客席、壁面嵌板与深海观景窗。' },
-]);
+import { PALACE_CENTER, PALACE_ROOMS } from './palace-layout.js';
+export { PALACE_CENTER, PALACE_ROOMS } from './palace-layout.js';
+
+const PALACE_BACK = -162;
+const ROOM_WINDOWS = { bedroom: 'conservatory', conservatory: 'bedroom', club: 'dining', dining: 'club' };
 
 function roomVisibleThroughDoors(lateral, depth, current, destination) {
   if (!current || current.id === 'gallery' || current.id === destination.id) return true;
+  if (ROOM_WINDOWS[current.id] === destination.id) return true;
   const portal = room => room.id === 'reception' ? [[-7.6, 0], [7.6, 0]] : [[Math.sign(room.center[0]) * 8, room.center[1] - 7.6], [Math.sign(room.center[0]) * 8, room.center[1] + 7.6]];
   const portals = [portal(current), portal(destination)];
   const origin = portals[0]; const reference = Math.atan2((origin[0][1] + origin[1][1]) / 2 - depth, (origin[0][0] + origin[1][0]) / 2 - lateral);
@@ -148,6 +147,8 @@ function placeSetting(shop, horizontal, depth, elevation, sign = 1) {
 
 function furnishings(room, materials) {
   const shop = new PalaceWorkshop(materials); const [horizontal, depth] = room.center;
+  furnishStoryArtifact(shop, room);
+  if (['conservatory', 'dining'].includes(room.id)) return furnishLivingSpace(shop, room, { seat, table, placeSetting, chandelier });
   decorateRoom(shop, room);
   const lamp = room.lamp || room.center;
   chandelier(shop, lamp[0], lamp[1], 17, room.id === 'reception' ? 6 : 4);
@@ -259,26 +260,35 @@ export class PalaceDistrict {
   constructor(scene) {
     this.scene = scene; this.root = new THREE.Group(); this.root.name = '潮冠宫城'; this.root.visible = false; this.scene.add(this.root); this.rooms = new Map(); this.visited = new Set(); this.activeRoom = null;
     this.frustum = new THREE.Frustum(); this.viewProjection = new THREE.Matrix4(); this.roomBounds = new THREE.Box3(); this.portalBounds = new THREE.Box3();
+    this.storyFlags = new Set();
   }
   prepare() {
     if (this.ready) return;
     this.ready = true; this.materials = palaceMaterials(); this.base = seaHeight(PALACE_CENTER[0], PALACE_CENTER[2]) + 12;
     this.tideClock = sanctuaryMaterials(this.materials);
+    livingSpaceMaterials(this.materials, this.tideClock);
     const shop = new PalaceWorkshop(this.materials);
-    shop.add('box', 'ivory', [0, -0.25, -27], [126, 0.5, 164], [0, 0, 0], true);
+    shop.add('box', 'ivory', [0, -0.25, -54], [126, 0.5, 218], [0, 0, 0], true);
+    shop.add('box', 'agedStone', [0, -6.2, -140], [134, 11.4, 48], [0, 0, 0], true, '花园与餐厅连续承重基座');
     shop.add('box', 'dark', [0, 23, -27], [126, 2, 164], [0, 0, 0], true);
+    shop.add('box', 'dark', [27.5, 23, -135], [71, 2, 54], [0, 0, 0], true, '餐厅与后廊实体顶板');
+    gardenRoof(shop);
     wall(shop, [-63, 54], [63, 54], { door: true });
     wall(shop, [-63, -108], [-8, -108], { window: true });
     wall(shop, [8, -108], [63, -108], { window: true });
-    wall(shop, [-8, -108], [8, -108]);
+    wall(shop, [-63, PALACE_BACK], [-8, PALACE_BACK], { window: true });
+    wall(shop, [8, PALACE_BACK], [63, PALACE_BACK], { window: true });
+    wall(shop, [-8, PALACE_BACK], [8, PALACE_BACK]);
     for (const side of [-1, 1]) {
       wall(shop, [side * 63, -108], [side * 63, 54], { side: true });
+      wall(shop, [side * 63, PALACE_BACK], [side * 63, -108], { side: true, window: side < 0 });
       wall(shop, [side * 8, -54], [side * 8, 0], { side: true, door: true });
       wall(shop, [side * 8, -108], [side * 8, -54], { side: true, door: true });
+      wall(shop, [side * 8, PALACE_BACK], [side * 8, -108], { side: true, door: true });
       wall(shop, [side * 8, -54], [side * 63, -54]);
     }
     wall(shop, [-63, 0], [63, 0], { door: true });
-    for (let distance = -104; distance < 55; distance += 7) {
+    for (let distance = PALACE_BACK + 4; distance < 55; distance += 7) {
       shop.add('box', 'gold', [0, 0.06, distance], [0.18, 0.04, 3]);
       for (const side of [-1, 1]) shop.add('box', 'gold', [side * 6, 0.06, distance], [0.12, 0.04, 7]);
     }
@@ -286,7 +296,7 @@ export class PalaceDistrict {
       shop.add('box', 'gold', [0, 21.8, depth], [124, 0.18, 0.35]);
       for (const lateral of [-56, -35, -14, 14, 35, 56]) shop.add('box', 'gold', [lateral, 21.8, depth + 6.5], [0.3, 0.18, 13]);
     }
-    this.shell = shop.finish('潮冠宫城 · 五室实体墙壳'); this.root.add(this.shell);
+    this.shell = shop.finish('潮冠宫城 · 七处空间实体墙壳'); this.root.add(this.shell);
     const exteriorShop = new PalaceWorkshop(this.materials);
     this.sanctuary = buildSanctuary(exteriorShop);
     this.exterior = exteriorShop.finish('潮冠宫城 · 海神圣域');
@@ -303,9 +313,21 @@ export class PalaceDistrict {
     hitArea(entrance, 2.7);
     for (const room of PALACE_ROOMS.slice(1)) {
       const marker = new THREE.Mesh(new THREE.TorusGeometry(1, 0.06, 6, 32), this.materials.light);
-      marker.position.set(Math.sign(room.center[0]) * 8, 6, room.center[1]); marker.rotation.y = Math.PI / 2;
+      marker.position.set(Math.sign(room.center[0]) * 8, 6, room.center[1]); marker.rotation.y = -Math.sign(room.center[0]) * Math.PI / 2;
       marker.name = `进入${room.name}`; marker.userData.palaceDestination = room.id; this.root.add(marker);
       hitArea(marker, 1.7);
+      if (typeof document !== 'undefined') {
+        const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 144;
+        const context = canvas.getContext('2d');
+        if (context) {
+          context.fillStyle = '#13363b'; context.fillRect(0, 0, 512, 144);
+          context.strokeStyle = '#b99a5b'; context.lineWidth = 4; context.strokeRect(8, 8, 496, 128);
+          context.fillStyle = '#eee0bf'; context.font = '500 54px serif'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText(room.name, 256, 74);
+          const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+          const sign = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 2.36), new THREE.MeshBasicMaterial({ map: texture }));
+          sign.position.set(0, 4, 0.22); sign.name = `进入${room.name}`; sign.userData.palaceDestination = room.id; sign.userData.noAO = true; marker.add(sign);
+        }
+      }
     }
     this.fill = new THREE.PointLight('#ffe4b8', 0, 78, 1.25); this.fill.position.set(0, 17, 26); this.fill.castShadow = false; this.root.add(this.fill);
     this.lightTarget = new THREE.Vector3(0, 17, 26);
@@ -313,13 +335,15 @@ export class PalaceDistrict {
     this.altarLight = new THREE.PointLight('#ffc579', 0, 72, 1.2); this.altarLight.position.set(0, 49, -72); this.root.add(this.altarLight);
   }
   roomAt(position) {
-    if (!this.ready || position.y < this.base || position.y > this.base + 22) return null;
+    if (!this.ready || position.y < this.base || position.y > this.base + 30) return null;
     const lateral = position.x - PALACE_CENTER[0]; const depth = position.z - PALACE_CENTER[2];
-    if (Math.abs(lateral) > 62 || depth > 54 || depth < -108) return null;
+    if (Math.abs(lateral) > 62 || depth > 54 || depth < PALACE_BACK) return null;
+    if (position.y > this.base + 22 && !(lateral < -8 && depth < -108)) return null;
     if (depth >= 0) return PALACE_ROOMS[0];
     if (Math.abs(lateral) < 8) return { id: 'gallery', name: '潮光长廊' };
     return PALACE_ROOMS.find(room => Math.sign(room.center[0]) === Math.sign(lateral) && Math.abs(room.center[1] - depth) <= 27);
   }
+  setStoryState(state) { this.storyFlags = new Set(state.flags.filter(flag => ['accepted', 'garden', 'table', 'ending'].includes(flag))); }
   route(position, id) {
     this.prepare(); const room = PALACE_ROOMS.find(candidate => candidate.id === id); if (!room && id !== 'exit') return null;
     const local = position.clone().sub(new THREE.Vector3(PALACE_CENTER[0], this.base, PALACE_CENTER[2]));
@@ -353,17 +377,19 @@ export class PalaceDistrict {
     let exteriorVisible = !camera || !this.activeRoom;
     if (!exteriorVisible) {
       exteriorVisible = roomVisibleThroughDoors(lateral, depth, this.activeRoom, PALACE_ROOMS[0]) && portalInView([-9, -1, 52], [9, 16, 57]);
-      if (['bedroom', 'club'].includes(this.activeRoom.id)) {
+      if (['bedroom', 'club', 'conservatory', 'dining'].includes(this.activeRoom.id)) {
         const center = this.activeRoom.center[0];
-        exteriorVisible ||= portalInView([center - 14.5, 3.5, -110], [center + 14.5, 18.5, -106]);
+        const rear = this.activeRoom.center[1] - 27;
+        exteriorVisible ||= portalInView([center - 14.5, 3.5, rear - 2], [center + 14.5, 18.5, rear + 2]);
       }
+      exteriorVisible ||= this.activeRoom.id === 'conservatory';
     }
     this.exterior.visible = exteriorVisible;
     for (const room of PALACE_ROOMS) {
       const close = Math.hypot(position.x - PALACE_CENTER[0] - room.center[0], position.z - PALACE_CENTER[2] - room.center[1]) < 95 && position.y < this.base + 38;
       if (close && !this.rooms.has(room.id)) {
         const root = furnishings(room, this.materials); const halfWidth = room.id === 'reception' ? 63 : 28;
-        root.userData.viewBounds = new THREE.Box3(new THREE.Vector3(room.center[0] - halfWidth, -0.2, room.center[1] - 28), new THREE.Vector3(room.center[0] + halfWidth, 22, room.center[1] + 28));
+        root.userData.viewBounds = new THREE.Box3(new THREE.Vector3(room.center[0] - halfWidth, -0.2, room.center[1] - 28), new THREE.Vector3(room.center[0] + halfWidth, room.id === 'conservatory' ? 30 : 22, room.center[1] + 28));
         const collisionAnchor = new THREE.Group(); collisionAnchor.name = `${room.name} · 实体阻挡`; collisionAnchor.userData.collisionBoxes = root.userData.collisionBoxes; root.userData.collisionBoxes = [];
         this.root.add(collisionAnchor, root); this.rooms.set(room.id, root);
       }
@@ -375,9 +401,12 @@ export class PalaceDistrict {
     }
     const center = this.activeRoom?.lamp || this.activeRoom?.center || [0, depth < 0 ? (depth < -54 ? -81 : -27) : 26];
     this.lightTarget.set(center[0], 17, center[1]);
-    const outside = Math.max(0, Math.abs(lateral) - 63, depth - 54, -108 - depth, elevation - 22, -elevation);
+    const outside = Math.max(0, Math.abs(lateral) - 63, depth - 54, PALACE_BACK - depth, elevation - (this.activeRoom?.id === 'conservatory' ? 30 : 22), -elevation);
     const intensity = 65 * (1 - THREE.MathUtils.smoothstep(outside, 0, 16));
     const elapsed = Number.isFinite(delta) ? Math.min(Math.max(delta, 0), 0.1) : 0;
+    this.materials.gardenGlow.emissiveIntensity = THREE.MathUtils.damp(this.materials.gardenGlow.emissiveIntensity, this.storyFlags.has('ending') ? 2 : this.storyFlags.has('garden') ? 1.65 : 0.45, 2, elapsed);
+    this.materials.guestGlow.emissiveIntensity = THREE.MathUtils.damp(this.materials.guestGlow.emissiveIntensity, this.storyFlags.has('ending') ? 2.05 : this.storyFlags.has('table') ? 1.7 : 0.04, 2, elapsed);
+    this.materials.invitationGlow.emissiveIntensity = THREE.MathUtils.damp(this.materials.invitationGlow.emissiveIntensity, this.storyFlags.has('ending') ? 2 : this.storyFlags.has('accepted') ? 0.8 : 0.05, 2, elapsed);
     if (!reduced) this.tideClock.value = (this.tideClock.value + elapsed) % 3600;
     const exteriorBlend = THREE.MathUtils.smoothstep(outside, 0, 18);
     this.sanctuaryLight.intensity = THREE.MathUtils.damp(this.sanctuaryLight.intensity, 280 * exteriorBlend, 3, elapsed);

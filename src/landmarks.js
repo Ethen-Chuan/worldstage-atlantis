@@ -6,7 +6,7 @@ export const LANDMARKS = Object.freeze([
   { id: 'vortex', name: '星海之眼', english: 'THE EYE OF A THOUSAND TIDES', number: '05', center: [980, 78, -620], camera: [1010, 52, -398], target: [980, 76, -620], radius: 265, color: '#0b3445', caption: '千万道微光，汇成深海的瞳孔。', invitation: '唤醒星海之眼', gesture: '输入“唤醒星海之眼”，看鱼群收束、奔涌，在银蓝与金色星轨中交辉。', kind: 'vortex', wonder: true, nocturne: 0.8 },
   { id: 'prism', name: '虹珊瑚海', english: 'THE GARDEN OF REFRACTED LIGHT', number: '06', center: [-880, 20, -1030], camera: [-812, 36, -866], target: [-880, 27, -1030], radius: 245, color: '#153a48', caption: '一束光经过，整片花园开始呼吸。', invitation: '唤醒虹珊瑚海', gesture: '输入“唤醒虹珊瑚海”，让光沿着珊瑚层层传开。', kind: 'prism', wonder: true, nocturne: 0.65 },
   { id: 'vents', name: '深渊光泉', english: 'THE FOUNTAINS BENEATH THE WORLD', number: '07', center: [760, 45, -1530], camera: [818, 40, -1330], target: [760, 55, -1530], radius: 255, color: '#122d40', caption: '海底的星火，向失落的天空升起。', invitation: '唤醒深渊光泉', gesture: '输入“唤醒深渊光泉”，让沉睡的光泉再次喷涌。', kind: 'vents', wonder: true, nocturne: 0.95 },
-  { id: 'crown', name: '潮冠宫城', english: 'THE SANCTUARY OF POSEIDON', number: '08', center: [-610, 35, 440], camera: [-432, 89, 715], target: [-610, 28, 410], radius: 335, terrainRadius: 175, color: '#294b47', caption: '巨柱托起海神的圣殿，潮水穿过千年的长廊。', invitation: '进入城堡', gesture: '点击入口光环，或输入“进入城堡”；五间房室由真实门洞相连。', kind: 'castle', nocturne: 0.18 },
+  { id: 'crown', name: '潮冠宫城', english: 'THE SANCTUARY OF POSEIDON', number: '08', center: [-610, 35, 440], camera: [-432, 89, 715], target: [-610, 28, 410], radius: 335, terrainRadius: 175, color: '#294b47', caption: '巨柱托起海神的圣殿，潮水穿过千年的长廊。', invitation: '进入城堡', gesture: '点击入口光环进入；长廊连接七处空间，新增潮汐内花园与珊瑚餐厅。', kind: 'castle', nocturne: 0.18 },
 ]);
 
 export const ECOLOGY_VIEWS = Object.freeze([

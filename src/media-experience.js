@@ -8,7 +8,7 @@ async function api(route, method = 'GET', body, signal) {
   return payload;
 }
 
-export function setupMedia({ getOcean, toast }) {
+export function setupMedia({ getOcean, toast, onPanel }) {
   const container = document.createElement('div');
   container.innerHTML = `<button id="ai-view-button" class="ai-view-button">影像工坊 <span>留住此刻</span></button>
     <video id="realtime-video" class="realtime-video" muted playsinline hidden></video><div id="realtime-badge" class="realtime-badge" hidden><span>AI 实时视频 · 并非精确三维状态</span><button id="compare-view">查看三维底稿</button><button id="disconnect-live">断开</button></div>
@@ -46,7 +46,7 @@ export function setupMedia({ getOcean, toast }) {
   let preparedImage = null;
   let consentMode = null;
   let recorder = null;
-  const panel = open => { if (open) document.querySelectorAll('.drawer').forEach(drawer => { drawer.hidden = true; }); elements['media-panel'].hidden = !open; (open ? elements['close-media'] : elements['ai-view-button']).focus(); };
+  const panel = open => { if (onPanel) return onPanel(open); if (open) document.querySelectorAll('.drawer').forEach(drawer => { drawer.hidden = true; }); elements['media-panel'].hidden = !open; (open ? elements['close-media'] : elements['ai-view-button']).focus(); };
   const prompt = () => elements['media-prompt'].value.trim().slice(0, 900) || defaultPrompt;
   const worldLabel = mode => { document.querySelector('#boundary-button').textContent = mode === 'ai' ? 'AI 实时视频实验 · 三维状态独立运行' : mode === 'compare' ? '原生三维底稿 · AI 推理仍在运行' : '实时 3D 造物原型 · 非 AI 视频模型生成'; };
 

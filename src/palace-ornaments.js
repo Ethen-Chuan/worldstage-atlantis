@@ -61,6 +61,7 @@ export function decorateRoom(shop, room) {
   if (room.id === 'reception') floorMedallion(shop, 0, 26, 13);
   else if (room.id === 'salon') floorMedallion(shop, -35, -27, 17);
   else if (room.id === 'club') floorMedallion(shop, 35, -79, 17);
+  else if (room.id === 'dining') floorMedallion(shop, horizontal, depth, 22);
   else {
     shop.add('box', 'wine', [horizontal, 0.031, depth], [32, 0.04, room.id === 'banquet' ? 41 : 36], [0, 0, 0], false, '织锦地毯');
     floorBorder(shop, horizontal, depth, 30, room.id === 'banquet' ? 39 : 34);
@@ -73,7 +74,7 @@ export function decorateRoom(shop, room) {
     const end = room.id === 'reception' ? (side < 0 ? 0.9 : 53.1) : depth + side * 26.05;
     for (let panel = -width / 2 + 6; panel < width / 2; panel += 11) {
       if (room.id === 'reception' && Math.abs(panel) < 10) continue;
-      if (side < 0 && ['bedroom', 'club'].includes(room.id) && Math.abs(panel) < 15) continue;
+      if ((side < 0 && ['bedroom', 'club', 'dining'].includes(room.id) || side > 0 && room.id === 'dining') && Math.abs(panel) < 15) continue;
       wallPanel(shop, [horizontal + panel, end], 7.2, side > 0 ? Math.PI : 0, room.id === 'bedroom' ? 'wine' : 'lapis');
     }
     const lateral = room.id === 'reception' ? side * 62.1 : horizontal + side * 26;

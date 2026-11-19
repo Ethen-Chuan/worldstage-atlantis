@@ -1,0 +1,6 @@
+#boot-shell { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; gap: 20px; padding: 32px; background: #0c252c; color: #e7e1ce; font-family: 'Songti SC', 'SimSun', serif; }
+#boot-shell img { width: 52px; height: 52px; margin: 0 auto; }
+#boot-shell h1 { font-size: 23px; line-height: 1.6; font-weight: 400; margin: 0; }
+#boot-shell p { font: 13px/1.8 sans-serif; color: #b9c9bf; margin: 0; max-width: 36em; }
+#boot-shell button { min-height: 44px; padding: 10px 20px; background: #dfd3b6; border: 0; color: #183039; cursor: pointer; font-size: 14px; }
+#boot-shell button[hidden] { display: none; }
