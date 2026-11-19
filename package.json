@@ -18,6 +18,7 @@
     "dev": "vite --host 127.0.0.1 --port 5196",
     "build": "vite build",
     "build:public": "vite build --mode public",
+    "build:vercel": "npm run build:public && node scripts/prepare-public-output.mjs",
     "textures": "node scripts/generate-skins.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 5196",
     "preview:phone": "node scripts/phone-preview.js",
