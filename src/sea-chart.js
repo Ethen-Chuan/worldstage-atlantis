@@ -1,9 +1,12 @@
-import { LANDMARKS } from './landmarks.js';
+import { ATLAS_SITES } from './landmarks.js';
 import { seaHeight } from './terrain.js';
 import { chartView, projectChart, unprojectChart, fitChart, chartScale, planarDistance, formatDistance } from './chart-math.js';
 import './sea-chart.css';
 
 const glyphs = {
+  'sunset-surface': '<path d="M2 20c3-3 4 3 7 0s4 3 7 0 4 2 6 0M3 14c3-6 9-9 14-5l4-1-2 3 2 3-5-1c-3-4-6-3-9 0l-4 1ZM12 8l1-4 3 4"/>',
+  'reef-closeup': '<path d="M12 22V4m0 10L5 9V5m7 13 7-7V7M5 9 2 7m17 4 3-2M12 8l4-3"/>',
+  'ancient-closeup': '<path d="M2 12c5-7 11-6 16-1l4-4v10l-4-4c-7 5-12 5-16-1Zm5-3v6m4-7v8m4-6v4"/>',
   crown: '<path d="m3 10 9-7 9 7H3Zm2 2v7m4-7v7m6-7v7m4-7v7M3 21h18M2 23h20M12 5v3"/>',
   palace: '<path d="M3 10 12 4l9 6M5 10h14M6 11v8m6-8v8m6-8v8M3 20h18"/>',
   gate: '<path d="M5 20V10a7 7 0 0 1 14 0v10M8 20V10a4 4 0 0 1 8 0v10M3 20h7m4 0h7M12 6v3"/>',
@@ -14,11 +17,11 @@ const glyphs = {
   vents: '<path d="m4 21 2-6h3l1 6m4 0 1-9h3l3 9M7 12c-4-4 4-5 1-9m9 6c-3-3 3-4 1-7"/>',
 };
 export const landmarkIcon = id => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${glyphs[id] || glyphs.choir}</svg>`;
-const options = LANDMARKS.map(landmark => `<option value="${landmark.id}">${landmark.name}</option>`).join('');
-const viewport = id => `<div id="${id}" class="chart-viewport" aria-label="海域航图"><svg class="chart-lines" aria-hidden="true"><g class="chart-contours"></g><path class="chart-route"/><path class="chart-measure"/></svg><span class="chart-north" aria-hidden="true">N<i></i></span><div class="chart-player" aria-label="你的位置"><span></span></div><div class="chart-markers">${LANDMARKS.map(landmark => `<button type="button" class="chart-marker" data-site="${landmark.id}" aria-label="查看${landmark.name}" title="${landmark.name}">${landmarkIcon(landmark.id)}<span>${landmark.name}</span><i></i></button>`).join('')}</div><div class="chart-scale"><i></i><span></span></div></div>`;
+const options = ATLAS_SITES.map(landmark => `<option value="${landmark.id}">${landmark.name}</option>`).join('');
+const viewport = id => `<div id="${id}" class="chart-viewport" aria-label="海域航图"><svg class="chart-lines" aria-hidden="true"><g class="chart-contours"></g><path class="chart-route"/><path class="chart-measure"/></svg><span class="chart-north" aria-hidden="true">N<i></i></span><div class="chart-player" aria-label="你的位置"><span></span></div><div class="chart-markers">${ATLAS_SITES.map(landmark => `<button type="button" class="chart-marker" data-site="${landmark.id}" aria-label="查看${landmark.name}" title="${landmark.name}">${landmarkIcon(landmark.id)}<span>${landmark.name}</span><i></i></button>`).join('')}</div><div class="chart-scale"><i></i><span></span></div></div>`;
 
 export function seaChartMarkup() {
-  return `<section class="mini-chart" aria-label="小地图"><button id="chart-button" class="chart-opener" aria-controls="chart-panel" aria-expanded="false"><span>${landmarkIcon('choir')}<b>海域航图</b></span><small>M <i>↗</i></small></button>${viewport('mini-viewport')}<div class="mini-reading"><span id="mini-heading">000° · 北</span><span id="mini-destination">八处目的地，等你抵达</span></div></section>
+  return `<section class="mini-chart" aria-label="小地图"><button id="chart-button" class="chart-opener" aria-controls="chart-panel" aria-expanded="false"><span>${landmarkIcon('choir')}<b>海域航图</b></span><small>M <i>↗</i></small></button>${viewport('mini-viewport')}<div class="mini-reading"><span id="mini-heading">000° · 北</span><span id="mini-destination">每片海域，都可独立抵达</span></div></section>
   <aside id="chart-panel" class="drawer sea-atlas" aria-label="海域航图" hidden><header class="chart-header"><div><span class="eyebrow">CARTOGRAPHY OF THE LOST WORLD</span><h2>海流之下，万象有迹。</h2></div><button id="close-chart" class="icon-button" aria-label="收起海域航图">×</button></header><div class="chart-workspace"><div class="chart-map-area"><div class="chart-toolbar" role="group" aria-label="航图控制"><button id="chart-fit">全海域</button><button id="chart-follow" aria-pressed="false">跟随我</button><button id="chart-orient" aria-pressed="false">北向上</button><span></span><button id="chart-out" aria-label="缩小航图">−</button><button id="chart-in" aria-label="放大航图">＋</button></div>${viewport('atlas-viewport')}<div class="chart-footnote"><span>拖动平移 · 滚轮缩放 · 点选地标</span><span id="chart-discoveries"></span></div></div><section class="chart-detail" aria-label="目的地与测距"><div class="chart-site-icon" id="chart-site-icon"></div><span id="chart-kind" class="eyebrow"></span><h3 id="chart-name"></h3><p id="chart-caption"></p><div class="chart-distance"><strong id="chart-distance"></strong><span>距你 · 水平直线距离</span></div><div class="chart-travel"><button id="chart-sail" class="primary-button">沿途航行 ↗</button><button id="chart-jump">快速抵达</button></div><p id="chart-navigation-note">路线通向观景点，不会改变你的造物。</p><div class="chart-ruler"><label for="chart-from">两地测距</label><div><select id="chart-from" aria-label="测距起点">${options}</select><span>至</span><select id="chart-to" aria-label="测距终点">${options}</select></div><output id="chart-pair-distance"></output><small>按地标中心计算 · 不代表避障路线</small></div><button id="chart-guide" class="text-button">查看地标手册 →</button></section></div><p id="chart-announcement" class="sr-only" role="status"></p></aside>`;
 }
 
@@ -81,12 +84,12 @@ export class SeaChart {
   }
 
   select(id) {
-    const landmark = LANDMARKS.find(item => item.id === id); if (!landmark) return;
+    const landmark = ATLAS_SITES.find(item => item.id === id); if (!landmark) return;
     this.selected = id;
     document.querySelector('#chart-name').textContent = landmark.name;
     document.querySelector('#chart-caption').textContent = landmark.caption;
     document.querySelector('#chart-site-icon').innerHTML = landmarkIcon(id);
-    document.querySelector('#chart-kind').textContent = `${landmark.number} / ${landmark.wonder ? '动态奇观' : '失落遗迹'}`;
+    document.querySelector('#chart-kind').textContent = `${landmark.number} / ${landmark.category || (landmark.wonder ? '动态奇观' : '失落遗迹')}`;
     document.querySelector('#chart-to').value = id;
     document.querySelector('#chart-announcement').textContent = `已选中${landmark.name}。可选择沿途航行或快速抵达。`;
     this.render();
@@ -102,7 +105,7 @@ export class SeaChart {
     const player = projectChart(position, view, 14);
     const marker = viewport.querySelector('.chart-player'); marker.style.transform = `translate(${player.x}px, ${player.y}px) rotate(${bearing - view.bearing}deg)`; marker.classList.toggle('off-chart', player.edge);
     viewport.querySelector('.chart-north').style.transform = `rotate(${-view.bearing}deg)`;
-    for (const landmark of LANDMARKS) {
+    for (const landmark of ATLAS_SITES) {
       const point = projectChart(landmark.center, view, compact ? 16 : 38);
       const button = viewport.querySelector(`[data-site="${landmark.id}"]`);
       button.style.left = `${point.x}px`; button.style.top = `${point.y}px`;
@@ -110,12 +113,12 @@ export class SeaChart {
       button.setAttribute('aria-pressed', String(landmark.id === this.selected));
       button.setAttribute('aria-label', `${landmark.name}，距你 ${formatDistance(planarDistance(position, landmark.center))}${point.edge ? '，在图外' : ''}`);
     }
-    const destination = LANDMARKS.find(landmark => landmark.id === this.selected);
+    const destination = ATLAS_SITES.find(landmark => landmark.id === this.selected);
     const target = projectChart(destination.center, view);
     const actualPlayer = projectChart(position, view);
     viewport.querySelector('.chart-route').setAttribute('d', `M${actualPlayer.x},${actualPlayer.y}L${target.x},${target.y}`);
-    const start = LANDMARKS.find(landmark => landmark.id === document.querySelector('#chart-from').value);
-    const end = LANDMARKS.find(landmark => landmark.id === document.querySelector('#chart-to').value);
+    const start = ATLAS_SITES.find(landmark => landmark.id === document.querySelector('#chart-from').value);
+    const end = ATLAS_SITES.find(landmark => landmark.id === document.querySelector('#chart-to').value);
     const first = projectChart(start.center, view); const second = projectChart(end.center, view);
     viewport.querySelector('.chart-measure').setAttribute('d', compact ? '' : `M${first.x},${first.y}L${second.x},${second.y}`);
     const scale = chartScale(view);
@@ -125,7 +128,7 @@ export class SeaChart {
   render() {
     if (!this.snapshot) return;
     const { position, bearing, visited } = this.snapshot;
-    const destination = LANDMARKS.find(landmark => landmark.id === this.selected);
+    const destination = ATLAS_SITES.find(landmark => landmark.id === this.selected);
     const distance = formatDistance(planarDistance(position, destination.center));
     document.querySelector('#mini-heading').textContent = `${String(Math.round(bearing) % 360).padStart(3, '0')}°`;
     document.querySelector('#mini-destination').textContent = `${destination.name} · ${distance}`;
@@ -136,12 +139,12 @@ export class SeaChart {
     this.view = chartView(this.view.center, this.view.span, this.atlas.clientWidth, this.atlas.clientHeight, this.headingUp ? bearing : 0);
     this.renderViewport(this.atlas, this.view, false);
     document.querySelector('#chart-distance').textContent = distance;
-    document.querySelector('#chart-discoveries').textContent = `${visited.length} / ${LANDMARKS.length} 已抵达`;
+    document.querySelector('#chart-discoveries').textContent = `${visited.length} / ${ATLAS_SITES.length} 已抵达`;
     document.querySelector('#chart-follow').setAttribute('aria-pressed', String(this.follow));
     document.querySelector('#chart-orient').setAttribute('aria-pressed', String(this.headingUp));
     document.querySelector('#chart-orient').textContent = this.headingUp ? '朝向上' : '北向上';
-    const start = LANDMARKS.find(landmark => landmark.id === document.querySelector('#chart-from').value);
-    const end = LANDMARKS.find(landmark => landmark.id === document.querySelector('#chart-to').value);
+    const start = ATLAS_SITES.find(landmark => landmark.id === document.querySelector('#chart-from').value);
+    const end = ATLAS_SITES.find(landmark => landmark.id === document.querySelector('#chart-to').value);
     document.querySelector('#chart-pair-distance').textContent = formatDistance(planarDistance(start.center, end.center));
   }
 

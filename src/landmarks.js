@@ -10,9 +10,14 @@ export const LANDMARKS = Object.freeze([
 ]);
 
 export const ECOLOGY_VIEWS = Object.freeze([
-  { id: 'sunset-surface', name: '逐日海豚', camera: [48, 198, 130], target: [-5, 193, -5], caption: '跃出深蓝，追逐碎金铺满的海面。', gesture: '滚轮拉远或 Q 上浮可连续抵达海面；点击海豚进入它的视角。' },
+  { id: 'sunset-surface', name: '逐日海豚', camera: [48, 198, 130], target: [-5, 193, -5], caption: '跃出深蓝，追逐昼夜流转的波光。', gesture: '滚轮拉远或 Q 上浮可连续抵达海面；点击海豚进入它的视角。' },
   { id: 'reef-closeup', name: '珊瑚近岸', camera: [-98, 3, 201], target: [-105, 3, 161], caption: '从海扇的细枝之间，看见另一座活着的城。', gesture: '试试“创造三只鹦鹉螺”，再让它们慢慢游。' },
   { id: 'ancient-closeup', name: '古鱼巡游', camera: [8, 32, 105], target: [18, 30, 34], caption: '鳞甲记录潮汐，巨兽经过千年。', gesture: '装甲古鱼是幻想生物，并非科学复原；可创造属于你的同类。' },
+]);
+
+export const ATLAS_SITES = Object.freeze([
+  ...LANDMARKS,
+  ...ECOLOGY_VIEWS.map((view, index) => ({ ...view, center: [...view.target], number: String(LANDMARKS.length + index + 1).padStart(2, '0'), category: index === 0 ? '海面奇观' : '生态海域', invitation: index === 0 ? '成为海豚' : index === 1 ? '创造三只鹦鹉螺' : '成为古鱼' })),
 ]);
 
 export function ecologyViewRequest(text) {

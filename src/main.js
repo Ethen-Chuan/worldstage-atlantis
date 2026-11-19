@@ -8,7 +8,7 @@ import { ASSETS, LIVING_ASSETS, CREATION_EXAMPLES, initialCreation, interpretCre
 import { initialState, interpretUtterance, executeUtterance, arriveAt, interruptJourney } from './dialogue.js';
 import { REGIONS, PLACES } from './world.js';
 import { setupMedia } from './media-experience.js';
-import { LANDMARKS, ECOLOGY_VIEWS, nearestLandmark } from './landmarks.js';
+import { LANDMARKS, ECOLOGY_VIEWS, ATLAS_SITES, nearestLandmark } from './landmarks.js';
 import { MEMORY_KEY, readMemory, writeMemory } from './world-memory.js';
 import { SeaChart, seaChartMarkup } from './sea-chart.js';
 import { embodimentMarkup, playMarkup, SITE_PLAY } from './world-interface.js';
@@ -17,6 +17,7 @@ import './responsive.css';
 import { setupViewport } from './viewport.js';
 import { planWorld, worldAction, WorldDirector, validateWorldPlan } from './world-planner.js';
 import { PALACE_ROOMS } from './palace-layout.js';
+import { palaceNavigationMarkup } from './palace-wayfinding.js';
 import './palace.css';
 import { StoryReader } from './story-reader.js';
 import { STORY_ENTRIES, storyForObject, advanceStory } from './tide-stories.js';
@@ -51,7 +52,7 @@ document.querySelector('#app').innerHTML = `
     <aside id="objects-panel" class="drawer" aria-label="此刻的造物" hidden>${panelHead('objects', 'THE THINGS YOU SHAPED', '此刻的造物')}<p class="drawer-intro">点击条目直接进入它的视角。<br/>进入后点“对世界说话”，仍可继续修改它。</p><div id="object-list"></div><section class="about-section"><h3>让世界留在这里</h3><p id="memory-summary">尚无本机存档。</p><div class="memory-actions"><button id="load-world" class="primary-button" disabled>继续上次的世界</button><button id="forget-world" class="text-button" disabled>删除存档</button></div><p>仅手动保存到此浏览器。保留造物、关系、视角与足迹；不保存输入原文、录音或密钥。清理浏览器数据会清除存档。</p></section><p class="drawer-note">最多 20 个可编辑造物，远处的自然遗迹不计入。<br/>离开前点击“保存世界”。未保存的改变会在刷新后消失。</p></aside>
     <aside id="history-panel" class="drawer" aria-label="创作记录" hidden>${panelHead('history', 'WORDS BECOME WORLDS', '世界如何生长')}<p class="drawer-intro">你的描述、理解来源与应用结果。<br/>不是预录视频，每次改变都有据可查。</p><div id="history-list"></div></aside>
     <aside id="tools-panel" class="drawer tools-panel" aria-label="探索工具" hidden>${panelHead('tools', 'EXPLORE AT YOUR OWN PACE', '探索与创造')}<p class="drawer-intro">在画面里点到谁，就直接进入谁的视角。<br/>这里收纳海图、小游戏、存档与录像。</p><div id="tools-content"></div></aside>
-    <aside id="journey-panel" class="drawer" aria-label="海域与奇观" hidden>${panelHead('journey', 'AN ATLAS WITHOUT AN EDGE', '奇观在远方')}<p class="drawer-intro">四处遗迹、三处动态奇观与一座可进入的宫城。<br/>先去看见，再用一句话唤醒。</p><div class="travel-mode" role="group" aria-label="地点切换方式"><button id="mode-quick" aria-pressed="true">快速抵达</button><button id="mode-sail" aria-pressed="false">沿途漫游</button></div><p id="travel-mode-note" class="travel-mode-note">默认快速切换，世界和你的造物不会重置。</p><div class="atlas-count"><span id="visited-count">01 / 08 已抵达</span><span>遗迹与动态奇观</span></div><div class="region-list">${[...LANDMARKS.filter(item => item.wonder), ...LANDMARKS.filter(item => !item.wonder)].map(landmark => `<button data-region="${landmark.id}" aria-label="前往${landmark.name}"><small>${landmark.number}</small><span>${landmark.name}${landmark.wonder ? '<strong class="wonder-type">动态奇观</strong>' : ''}<em>${landmark.caption}</em><i data-distance="${landmark.id}"></i></span><b data-visited="${landmark.id}">↗</b></button>`).join('')}</div><p class="drawer-note">拖动环顾，WASD 前后左右，Q / E 升降。<br/>触屏可拖动转向，点击“持续前游”。地标之外仍可探索，没有固定地图墙。</p></aside>
+    <aside id="journey-panel" class="drawer" aria-label="海域与奇观" hidden>${panelHead('journey', 'AN ATLAS WITHOUT AN EDGE', '奇观在远方')}<p class="drawer-intro">遗迹、宫城、海面奇观与生态海域，并列探索。<br/>先去看见，再用一句话唤醒。</p><div class="travel-mode" role="group" aria-label="地点切换方式"><button id="mode-quick" aria-pressed="true">快速抵达</button><button id="mode-sail" aria-pressed="false">沿途漫游</button></div><p id="travel-mode-note" class="travel-mode-note">默认快速切换，世界和你的造物不会重置。</p><div class="atlas-count"><span id="visited-count">01 / 11 已抵达</span><span>遗迹与动态奇观</span></div><div class="region-list">${ATLAS_SITES.map(landmark => `<button data-region="${landmark.id}" aria-label="前往${landmark.name}"><small>${landmark.number}</small><span>${landmark.name}${landmark.wonder || landmark.category ? `<strong class="wonder-type">${landmark.category || '动态奇观'}</strong>` : ''}<em>${landmark.caption}</em><i data-distance="${landmark.id}"></i></span><b data-visited="${landmark.id}">↗</b></button>`).join('')}</div><p class="drawer-note">拖动环顾，WASD 前后左右，Q / E 升降。<br/>触屏可拖动转向，点击“持续前游”。地标之外仍可探索，没有固定地图墙。</p></aside>
     <aside id="settings-panel" class="drawer" aria-label="设置与能力说明" hidden>${panelHead('settings', 'THE CRAFT BEHIND THE WORLD', '让想象有所回应')}
       <section class="about-section"><h3>这一版可以创造什么</h3><p>14 类资产：神殿、拱门、星门、珊瑚、鲸鱼、鲨鱼、蝠鲼、水母、鱼群、三叉戟、装甲古鱼、海龟、鹦鹉螺、人鱼。文字可以指定位置、数量、尺度、材质色、光芒、速度与高度；遗迹可调整侵蚀与附生珊瑚。</p><p>例如：“创造一只海龟” → “让海龟跟随鲸鱼”。可让生物同行、环绕建筑，或让鲸鱼接近珊瑚时触发发光。说“停止跟随”，它会留在旅途中的当前位置。</p><p>形状来自有边界的三维资产与参数组合，不支持任意新物种或逐帧视频生成。已有实体碰撞、近域避让和有限捕食，不是科研级物理或生态模拟。命名地标与环境生态不能任意修改；可直接代入，或创造同类。人鱼头手使用经 Blender 处理的基础网格，装甲古鱼与人鱼仍为幻想设计，不是科学复原。</p></section>
       <section class="about-section"><h3>理解引擎</h3><p id="model-status">正在检查服务配置……</p><button id="model-toggle" class="primary-button" disabled>大模型尚未配置</button><p>默认是有边界的本地规则，不假装任意自然语言都能理解。模型接入后也只能操作支持的资产和属性；失败不会偷偷降级。</p></section>
@@ -69,7 +70,7 @@ document.querySelector('#app').innerHTML = `
   </main>`;
 
 const elements = Object.fromEntries([...document.querySelectorAll('[id]')].map(element => [element.id, element]));
-document.querySelector('.edition small').textContent = '0.14.3 · 逐浪跃游';
+document.querySelector('.edition small').textContent = '0.14.4 · 万象随潮';
 let state = initialCreation();
 let journeyState = initialState();
 let ocean;
@@ -288,8 +289,8 @@ elements['memory-confirm'].addEventListener('close', () => {
 });
 
 function renderAtlas() {
-  elements['visited-count'].textContent = `${String(discovered.size).padStart(2, '0')} / ${String(LANDMARKS.length).padStart(2, '0')} 已抵达`;
-  for (const landmark of LANDMARKS) {
+  elements['visited-count'].textContent = `${String(discovered.size).padStart(2, '0')} / ${String(ATLAS_SITES.length).padStart(2, '0')} 已抵达`;
+  for (const landmark of ATLAS_SITES) {
     const marker = document.querySelector(`[data-visited="${landmark.id}"]`);
     marker.textContent = discovered.has(landmark.id) ? '✓' : '↗';
     marker.setAttribute('aria-label', discovered.has(landmark.id) ? '已抵达' : '尚未抵达');
@@ -393,7 +394,7 @@ for (const mode of ['quick', 'sail']) elements[`mode-${mode}`].addEventListener(
 });
 async function navigate(region, requestedMode = travelMode) {
   if (!ocean) return;
-  const landmark = [...LANDMARKS, ...ECOLOGY_VIEWS].find(item => item.id === region);
+  const landmark = ATLAS_SITES.find(item => item.id === region);
   if (!landmark) return;
   ocean.play.stop(); ocean.embodiment.exit(false); updateEmbodimentUI();
   cancelUnderstanding(); cancelNavigation();
@@ -428,13 +429,6 @@ async function navigate(region, requestedMode = travelMode) {
 function requestTravel(site, mode = travelMode) { return dispatchWorld(worldAction('travel', { site, mode })); }
 document.querySelectorAll('[data-region]').forEach(button => button.addEventListener('click', () => requestTravel(button.dataset.region))); elements['home-button'].addEventListener('click', () => requestTravel('palace'));
 elements['first-wonder'].addEventListener('click', () => requestTravel('vortex'));
-const ecologySection = document.createElement('section'); ecologySection.className = 'about-section';
-ecologySection.innerHTML = '<h3>走近这片生态</h3><p>海扇与桌形珊瑚构成礁丛，海龟穿过中层，装甲古鱼缓慢巡游。礁鱼会避让靠近的视角与巨兽。</p><div class="memory-actions"></div><p>环境生物用于观景；想修改它们的同类，请用文字创造。古鱼与人鱼是幻想设计，不是古生物复原。</p>';
-for (const view of ECOLOGY_VIEWS) {
-  const button = document.createElement('button'); button.className = 'text-button'; button.textContent = view.name;
-  button.addEventListener('click', () => requestTravel(view.id)); ecologySection.querySelector('.memory-actions').append(button);
-}
-elements['journey-panel'].append(ecologySection);
 elements['snapshot-button'].addEventListener('click', async () => {
   if (!ocean) return; elements['snapshot-button'].disabled = true;
   try {
@@ -500,6 +494,8 @@ function nearbyActors() {
   if (!ocean) return [];
   const authored = [...ocean.creationScene.objects.values()].filter(entry => entry.root.visible && LIVING_ASSETS.includes(entry.item.asset)).map(entry => ({ root: entry.root, shape: entry.shape, species: entry.item.asset, id: entry.item.id, name: entry.item.name, living: true }));
   const natural = ocean.ecology.animals.filter(actor => actor.root.visible).map(actor => ({ ...actor, shape: actor.root, species: actor.kind, name: ASSETS[actor.kind], living: true }));
+  natural.push(...(ocean.visibleJellies || []).map(actor => ({ ...actor, name: actor.root.userData.displayName, living: true })));
+  natural.push(...ocean.surface.animals.filter(actor => actor.root.visible).map(actor => ({ ...actor, shape: actor.root, species: 'dolphin', name: '追光海豚', living: true })));
   if (ocean.ecology.ancient.root.visible) natural.push({ ...ocean.ecology.ancient, shape: ocean.ecology.ancient.root, species: 'ancient', name: ASSETS.ancient, living: true });
   if (ocean.embodiment.active?.living) natural.push(ocean.embodiment.active);
   const landmarks = [...ocean.landmarks.entries, ...ocean.wonders.entries.values()].filter(entry => entry.root.visible);
@@ -583,14 +579,14 @@ async function renderWorldAction({ kind, args }) {
     const response = args.summon ? `潮汐记得你的呼唤。${args.summon}，从旧日之海归来。` : args.echo ? `深海记住了你的呼唤。${args.echo}，愿回声将你唤回。` : `${site.name}，听见了你的声音。`;
     elements['response-line'].textContent = response; elements['action-label'].textContent = args.site === 'vortex' ? '万鱼收束 → 星环奔涌 → 群星交辉 · 18 秒连续演变' : '光沿着海流与枝脉展开';
     if (args.site === 'gate') {
-      elements['action-label'].textContent = sound.userMuted ? '当前静音 · 开启配乐后再次呼唤' : 'GRC 声音版 · 古希腊语回声加载中 · 不使用中文朗读';
+      elements['action-label'].textContent = sound.userMuted ? '当前静音 · 开启配乐后再次呼唤' : '';
       await sound.activateFromGesture({ waitForMusic: false }); sound.creatureAudio.stop();
       const pending = sound.gateEcho.speak(args.summon || args.echo || 'gate'); const voiceRevision = sound.gateEcho.revision;
       const invocation = sound.gateEcho.invocation;
       if (invocation) elements['response-line'].textContent = `${invocation.ancient}  ·  ${invocation.meaning}`;
       const spoken = await pending;
       if (voiceRevision !== sound.gateEcho.revision) return;
-      elements['action-label'].textContent = spoken ? 'GRC 声音版 · 古希腊语男声 · 合成近似发音 · 中文仅为字幕' : sound.userMuted ? '当前静音 · 开启配乐后再次呼唤' : '古希腊语音色未就绪 · 请运行 npm run audio:gate · 不使用中文朗读替代';
+      elements['action-label'].textContent = spoken ? '' : sound.userMuted ? '当前静音 · 开启配乐后再次呼唤' : '回声暂时未能响起，请稍后重试。';
     }
     recentResult = null; document.body.classList.add('has-interacted');
   }
@@ -644,6 +640,10 @@ elements['whale-fall-start'].addEventListener('click', () => dispatchWorld(world
 elements['whale-fall-stop'].addEventListener('click', () => dispatchWorld(worldAction('whale-fall', { enabled: false })));
 elements['ritual-example'].addEventListener('click', () => fill(ocean?.currentLandmark?.id === 'gate' ? '唤醒回声天门，召唤鲸鱼' : `唤醒${ocean?.currentLandmark?.name || '潮生圣城'}`));
 const audioSettings = document.createElement('section'); audioSettings.className = 'about-section';
+const timeSettings = document.createElement('section'); timeSettings.className = 'about-section';
+timeSettings.innerHTML = '<h3>海天时序</h3><label class="setting-row">光影时刻<select id="time-mode"><option value="realtime">跟随本机时间</option><option value="day">白昼</option><option value="dusk">黄昏</option><option value="night">夜海</option></select></label><p>海面与海底共用一条时序，切换时渐变过渡。跟随设备时区，以艺术化昼夜表现，不是当地天文日出日落计算。</p><h3>天门的声音</h3><p>使用古希腊语文本与合成男声，属于近似发音的艺术设计，不是历史录音。中文只用作字幕；门上的刻纹按实际语音音量起伏。</p>';
+elements['settings-panel'].append(timeSettings);
+timeSettings.querySelector('#time-mode').addEventListener('change', event => ocean?.setTimeMode(event.target.value));
 audioSettings.innerHTML = `<div class="score-now"><span class="eyebrow">THE WORLD HAS A SCORE</span><h3 id="score-title">沉没的王冠</h3><p id="score-status" role="status">首次操作世界后奏响</p></div><p>七处遗迹与奇观、潮冠宫城和金色海面，九段独立的管弦主题。真实录制的弦乐、圆号、竖琴、长笛、定音鼓与钟琴音色，在本机按原创乐谱演奏。抵达时换章，环境回应时弦乐与圆号逐层铺开；不是单一海流循环。</p>${[['music', '奇观配乐'], ['effects', '互动音效'], ['ambience', '海流底声']].map(([channel, label]) => `<label class="setting-row audio-level">${label}<input data-audio-level="${channel}" type="range" min="0" max="100" value="${sound.levels[channel] * 100}" aria-label="${label}音量"/><output>${Math.round(sound.levels[channel] * 100)}%</output></label>`).join('')}<p>首次点击或按键后启声。顶部可一键静音，记住你的选择；暂停画面时轻声伴奏继续，离开标签页时停止声音。音色随项目加载，不上传文字。</p><label class="setting-row">本机文字吟诵<input id="narration-toggle" type="checkbox"/></label><p>仅使用本机中文语音，无本机声音时保留字幕与艺术化吟声；不是历史古语或动物语言复原。</p>`;
 elements['settings-panel'].append(audioSettings);
 audioSettings.insertAdjacentHTML('beforeend', '<div class="score-now"><h3>人鱼的歌与远处鲸鸣</h3><p id="creature-voice-status" role="status"></p><button id="retry-creature-voices" hidden>重试歌声与鲸鸣</button><p>人鱼演唱德彪西《Spleen》的法语歌词片段，女高音 Xiaobo Su、钢琴 Giorgi Latsabidze；不是中文原创歌或语音朗读。鲸声来自 NOAA PMEL 公开录音，已处理源文件加速并作空间混音。两者均随“互动音效”音量调整。</p></div>');
@@ -652,16 +652,14 @@ audioSettings.querySelector('#narration-toggle').addEventListener('change', even
 audioSettings.querySelectorAll('[data-audio-level]').forEach(input => input.addEventListener('input', () => { sound.setLevel(input.dataset.audioLevel, Number(input.value) / 100); input.nextElementSibling.value = `${input.value}%`; }));
 elements['settings-panel'].insertBefore(audioSettings, elements['settings-panel'].firstElementChild.nextSibling); updateAudioUI();
 const palacePanel = document.createElement('section'); palacePanel.className = 'palace-panel'; palacePanel.hidden = true; palacePanel.setAttribute('aria-label', '宫城房间导览');
-palacePanel.innerHTML = `<details><summary><span>潮冠宫城</span><strong id="palace-current">${PALACE_ROOMS.length} 处空间 · 含花园与餐厅</strong></summary><p id="palace-description">点击门牌或光环进入。长廊尽头是花园与餐厅，也可输入“去花园”或“去餐厅”。WASD 移动，拖动环顾。</p><nav>${PALACE_ROOMS.map(room => `<button data-room="${room.id}" title="${room.description}">${room.name}<span>↗</span></button>`).join('')}<button data-room="exit">返回宫城前庭 <span>↗</span></button></nav></details>`;
+palacePanel.innerHTML = palaceNavigationMarkup();
 document.body.append(palacePanel);
 palacePanel.querySelectorAll('[data-room]').forEach(button => button.addEventListener('click', () => { void dispatchWorld(worldAction('palace-room', { room: button.dataset.room })); if (innerWidth < 700) palacePanel.querySelector('details').open = false; }));
-const palaceStory = document.createElement('button'); palaceStory.textContent = '潮汐手记 · 未赴之约'; palaceStory.addEventListener('click', () => dispatchWorld(worldAction('story', { entry: 'journal' }))); palacePanel.querySelector('nav').prepend(palaceStory);
+palacePanel.querySelector('[data-palace-journal]').addEventListener('click', () => dispatchWorld(worldAction('story', { entry: 'journal' })));
 function updatePlayUI() {
   const landmark = ocean.currentLandmark; const site = ocean.surface.blend < 0.5 && SITE_PLAY[landmark?.id] ? landmark : null; const play = ocean.play.inspect();
   palacePanel.hidden = landmark?.id !== 'crown' || Boolean(ocean.embodiment.active);
   document.body.classList.toggle('in-palace', Boolean(ocean.palace.activeRoom) && !ocean.embodiment.active);
-  palacePanel.querySelector('#palace-current').textContent = ocean.palace.activeRoom?.name || `${PALACE_ROOMS.length} 处空间 · 含花园与餐厅`;
-  palacePanel.querySelector('#palace-description').textContent = ocean.palace.activeRoom?.description || '点击门牌或光环进入。长廊尽头是花园与餐厅，也可输入“去花园”或“去餐厅”。WASD 移动，拖动环顾。';
   for (const button of palacePanel.querySelectorAll('[data-room]')) button.setAttribute('aria-current', String(button.dataset.room === ocean.palace.activeRoom?.id));
   document.body.classList.toggle('trial-complete', Boolean(play.trial?.finished));
   elements['site-play'].hidden = !site;
@@ -716,7 +714,7 @@ async function boot() {
         if (!ocean) return;
         if (creationGuide.active && creationGuide.step === 'save') renderCreationGuide();
         cruise.textContent = ocean.cruising ? 'Ⅱ 停止前游' : '▷ 持续前游'; cruise.setAttribute('aria-pressed', String(ocean.cruising));
-        elements['place-name'].textContent = ocean.surface.blend > 0.5 ? '逐日海豚 · 金色海面' : ocean.palace.activeRoom?.name || ocean.currentLandmark?.name || ocean.currentBiome?.name || '潮生圣城';
+        elements['place-name'].textContent = ocean.surface.blend > 0.5 ? '逐日海豚 · 海天之间' : ocean.palace.activeRoom?.name || ocean.currentLandmark?.name || ocean.currentBiome?.name || '潮生圣城';
         const position = ocean.worldPosition();
         const nearest = nearestLandmark(position.toArray());
         const heading = ocean.camera.getWorldDirection(ocean.camera.position.clone());
@@ -736,8 +734,9 @@ async function boot() {
           const label = { planning: '正在规划安全航路', avoiding: '正在减速绕行', waiting: '等待生物通过' }[navigation.status] || (navigation.detour ? '沿安全航路绕行' : '沿海流自动航行');
           elements['action-label'].textContent = `${state.paused ? '航行已暂停' : label} · 余程 ${navigation.remaining} m · 拖动可接管`;
         }
-        discover(ocean.currentLandmark);
-        if (!elements['journey-panel'].hidden) for (const landmark of LANDMARKS) document.querySelector(`[data-distance="${landmark.id}"]`).textContent = `${Math.round(Math.hypot(position.x - landmark.center[0], position.z - landmark.center[2]))} m${nearest.id === landmark.id ? ' · 最近的遗迹' : ''}`;
+        discover(ocean.surface.blend > 0.5 ? ATLAS_SITES.find(site => site.id === 'sunset-surface') : ocean.currentLandmark);
+        if (document.activeElement !== timeSettings.querySelector('#time-mode')) timeSettings.querySelector('#time-mode').value = ocean.dayClock.mode;
+        if (!elements['journey-panel'].hidden) for (const landmark of ATLAS_SITES) document.querySelector(`[data-distance="${landmark.id}"]`).textContent = `${Math.round(Math.hypot(position.x - landmark.center[0], position.z - landmark.center[2]))} m${nearest.id === landmark.id ? ' · 最近的遗迹' : ''}`;
         if (modelRequest || ocean.travelTarget || !recentResult?.changed || recentResult.issues.length || state.paused) return;
         const growing = ocean.creationScene.inspect().filter(item => item.growing); elements['action-label'].textContent = growing.length ? `${growing.length} 个造物正在成形 · 可以随时暂停` : '改变已应用 · 接着描述，世界会记住上一次改变';
       },

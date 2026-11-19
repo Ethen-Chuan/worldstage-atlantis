@@ -4,6 +4,7 @@ import { PalaceWorkshop, palaceMaterials, beam, column, moldingFrame, shellCrest
 import { decorateRoom } from './palace-ornaments.js';
 import { buildSanctuary, sanctuaryMaterials } from './palace-sanctuary.js';
 import { livingSpaceMaterials, furnishLivingSpace, gardenRoof, furnishStoryArtifact } from './palace-living-spaces.js';
+import { PALACE_GLYPHS } from './palace-wayfinding.js';
 
 import { PALACE_CENTER, PALACE_ROOMS } from './palace-layout.js';
 export { PALACE_CENTER, PALACE_ROOMS } from './palace-layout.js';
@@ -296,6 +297,11 @@ export class PalaceDistrict {
       shop.add('box', 'gold', [0, 21.8, depth], [124, 0.18, 0.35]);
       for (const lateral of [-56, -35, -14, 14, 35, 56]) shop.add('box', 'gold', [lateral, 21.8, depth + 6.5], [0.3, 0.18, 13]);
     }
+    for (const room of PALACE_ROOMS.slice(1)) {
+      const side = Math.sign(room.center[0]);
+      const point = ([across, down]) => [side * 7.24, 16.2 + (16 - down) * 0.09, room.center[1] + side * (across - 16) * 0.09];
+      for (const stroke of PALACE_GLYPHS[room.id]) for (let index = 1; index < stroke.length; index++) beam(shop, point(stroke[index - 1]), point(stroke[index]), 0.045, 'gold', '门拱嵌金图腾');
+    }
     this.shell = shop.finish('潮冠宫城 · 七处空间实体墙壳'); this.root.add(this.shell);
     const exteriorShop = new PalaceWorkshop(this.materials);
     this.sanctuary = buildSanctuary(exteriorShop);
@@ -316,18 +322,6 @@ export class PalaceDistrict {
       marker.position.set(Math.sign(room.center[0]) * 8, 6, room.center[1]); marker.rotation.y = -Math.sign(room.center[0]) * Math.PI / 2;
       marker.name = `进入${room.name}`; marker.userData.palaceDestination = room.id; this.root.add(marker);
       hitArea(marker, 1.7);
-      if (typeof document !== 'undefined') {
-        const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 144;
-        const context = canvas.getContext('2d');
-        if (context) {
-          context.fillStyle = '#13363b'; context.fillRect(0, 0, 512, 144);
-          context.strokeStyle = '#b99a5b'; context.lineWidth = 4; context.strokeRect(8, 8, 496, 128);
-          context.fillStyle = '#eee0bf'; context.font = '500 54px serif'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText(room.name, 256, 74);
-          const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
-          const sign = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 2.36), new THREE.MeshBasicMaterial({ map: texture }));
-          sign.position.set(0, 4, 0.22); sign.name = `进入${room.name}`; sign.userData.palaceDestination = room.id; sign.userData.noAO = true; marker.add(sign);
-        }
-      }
     }
     this.fill = new THREE.PointLight('#ffe4b8', 0, 78, 1.25); this.fill.position.set(0, 17, 26); this.fill.castShadow = false; this.root.add(this.fill);
     this.lightTarget = new THREE.Vector3(0, 17, 26);

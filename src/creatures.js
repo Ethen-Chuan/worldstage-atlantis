@@ -5,6 +5,7 @@ import { organicSurface } from './creature-surface.js';
 import { smoothBody, attachSwimming } from './swim.js';
 import { schoolTarget } from './habitat-motion.js';
 import { SchoolMotion } from './school-motion.js';
+import { createJellyBloom } from './jellyfish.js';
 
 function mesh(geometry, material, position = [0, 0, 0], scale = [1, 1, 1]) {
   const object = new THREE.Mesh(geometry, material);
@@ -119,7 +120,7 @@ export function createManta() {
   };
 }
 
-export function createWhale() {
+export function createWhale({ falling = false } = {}) {
   const root = new THREE.Group();
   const material = organicSurface(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.54, metalness: 0, clearcoat: 0.16, clearcoatRoughness: 0.38 }), 'whale', { relief: 0.038 });
   const finMaterial = organicSurface(new THREE.MeshStandardMaterial({ color: '#a6b0a5', roughness: 0.58, metalness: 0, side: THREE.DoubleSide }), 'whale', { relief: 0.024, length: 16 });
@@ -183,98 +184,27 @@ export function createWhale() {
   dorsal.position.set(0, 2.3, 5.5);
   root.add(dorsal);
   root.scale.setScalar(1.35);
-  const swim = attachSwimming(root, { axis: 'y', start: -2, end: 18, amplitude: 1.12, frequency: 0.78, wavelength: 0.095 });
+  const swim = attachSwimming(root, { axis: 'y', start: -2, end: 18, amplitude: 1.12, frequency: 0.78, wavelength: 0.095, dynamicAmplitude: falling, shadow: falling });
   root.userData = { creature: 'whale', mode: 'idle', basePosition: new THREE.Vector3(3, 85, -4), moveTarget: new THREE.Vector3(3, 85, -4) };
   root.position.copy(root.userData.basePosition);
   root.rotation.y = -1.15;
   return {
     root,
-    animate(time) {
-      swim.update(time); const joint = swim.sample(17, time);
+    animate(time, effort = 1) {
+      const strength = falling ? effort : 1;
+      swim.update(time, strength); const joint = swim.sample(17, time, strength);
       fluke.rotation.x = -Math.atan(joint.slope); fluke.position.y = joint.offset;
-      dorsal.position.y = 2.3 + swim.sample(5.5, time).offset;
-      fins.forEach((fin, index) => { fin.rotation.z = (index ? 1 : -1) * (-0.5 + Math.sin(time * 0.78 - 0.4 + index * 0.12) * 0.095); fin.rotation.y = Math.sin(time * 0.78 - 0.9) * 0.04; });
+      dorsal.position.y = 2.3 + swim.sample(5.5, time, strength).offset;
+      fins.forEach((fin, index) => { fin.rotation.z = (index ? 1 : -1) * (-0.08 - strength * 0.42 + Math.sin(time * 0.78 - 0.4 + index * 0.12) * 0.095 * strength); fin.rotation.y = Math.sin(time * 0.78 - 0.9) * 0.04 * strength; });
     },
   };
 }
 
 export function createJellies() {
-  const root = new THREE.Group();
-  const random = seededRandom(81);
-  const bellMaterial = new THREE.MeshPhysicalMaterial({ color: '#b4b4d1', emissive: '#a192ca', emissiveIntensity: 0.55, transparent: true, opacity: 0.5, roughness: 0.25, metalness: 0.05, side: THREE.DoubleSide, depthWrite: false });
-  bellMaterial.onBeforeCompile = shader => {
-    shader.vertexShader = 'varying vec3 bellPosition;\n' + shader.vertexShader;
-    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nbellPosition = position;');
-    shader.fragmentShader = 'varying vec3 bellPosition;\n' + shader.fragmentShader;
-    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `
-      #include <color_fragment>
-      float bellAngle = atan(bellPosition.x, bellPosition.z);
-      float vein = pow(0.5 + 0.5 * sin(bellAngle * 16.0), 14.0);
-      float edge = pow(1.0 - abs(normalize(bellPosition).y), 4.0);
-      diffuseColor.a *= 0.3 + vein * 0.5 + edge * 0.5;
-    `);
-  };
-  const rimMaterial = new THREE.MeshBasicMaterial({ color: '#c9c6db', transparent: true, opacity: 0.7 });
-  const threadMaterial = new THREE.MeshBasicMaterial({ color: '#b5b6ce', transparent: true, opacity: 0.3, depthWrite: false });
-  const jellies = [];
-  for (let index = 0; index < 16; index++) {
-    const jelly = new THREE.Group();
-    const size = 0.6 + random() * 1.1;
-    jelly.add(mesh(new THREE.SphereGeometry(1, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2 + 0.23), bellMaterial, [0, 0, 0], [1, 0.7, 1]));
-    const rim = mesh(new THREE.TorusGeometry(0.975, 0.025, 6, 40), rimMaterial, [0, -0.13, 0]);
-    rim.rotation.x = Math.PI / 2;
-    jelly.add(rim);
-    for (let tentacle = 0; tentacle < 8; tentacle++) {
-      const angle = tentacle / 8 * Math.PI * 2;
-      const length = 2.2 + random() * 2.6;
-      const points = [];
-      for (let step = 0; step <= 14; step++) {
-        const progress = step / 14;
-        points.push(new THREE.Vector3(Math.cos(angle) * 0.8 + Math.sin(progress * 7 + angle) * progress * 0.5, -progress * length - 0.15, Math.sin(angle) * 0.8 + Math.cos(progress * 6 + angle) * progress * 0.45));
-      }
-      jelly.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 20, tentacle % 2 ? 0.012 : 0.027, 4, false), tentacle % 2 ? threadMaterial : rimMaterial));
-    }
-    for (let petal = 0; petal < 4; petal++) {
-      const angle = petal / 4 * Math.PI * 2;
-      const inner = mesh(new THREE.TorusGeometry(0.21, 0.04, 6, 16), rimMaterial, [Math.cos(angle) * 0.23, 0.2, Math.sin(angle) * 0.23]);
-      inner.rotation.x = Math.PI / 2;
-      jelly.add(inner);
-    }
-    jelly.scale.setScalar(size);
-    jelly.position.set((random() - 0.5) * 15, (random() - 0.5) * 9, (random() - 0.5) * 13);
-    jelly.userData.base = jelly.position.clone();
-    jelly.userData.size = size;
-    mergeStaticParts(jelly);
-    root.add(jelly);
-    jellies.push(jelly);
-  }
-  root.userData = { creature: 'jelly', mode: 'idle', basePosition: new THREE.Vector3(-45, 4, 95), moveTarget: new THREE.Vector3(-45, 4, 95) };
-  root.position.copy(root.userData.basePosition);
-  let glow = 0;
-  let targetGlow = 0;
-  const baseColor = new THREE.Color('#c9e5df');
-  return {
-    root,
-    setGlow(value) { targetGlow = value ? 1 : 0; },
-    setColor(value) {
-      baseColor.set({ pearl: '#c9e5df', rose: '#ec9eaf', blue: '#7bbfe9', gold: '#eac785', teal: '#68a897' }[value] || '#c9e5df');
-      bellMaterial.color.copy(baseColor);
-      bellMaterial.emissive.copy(baseColor);
-      threadMaterial.color.copy(baseColor);
-    },
-    animate(time, delta) {
-      glow = THREE.MathUtils.damp(glow, targetGlow, 1.1, delta);
-      bellMaterial.emissiveIntensity = 0.32 + glow * 1.4;
-      bellMaterial.opacity = 0.29 + glow * 0.12;
-      rimMaterial.color.copy(baseColor).multiplyScalar(0.8 + glow * 0.45);
-      jellies.forEach((jelly, index) => {
-        jelly.position.y = jelly.userData.base.y + Math.sin(time * 0.5 + index * 1.2) * 1.1;
-        jelly.position.x = jelly.userData.base.x + Math.sin(time * 0.22 + index) * 0.8;
-        jelly.scale.y = jelly.userData.size * (1 + Math.sin(time * 2.1 + index) * 0.085);
-        jelly.rotation.y = time * 0.055 + index;
-      });
-    },
-  };
+  const bloom = createJellyBloom();
+  bloom.root.userData = { creature: 'jelly', mode: 'idle', basePosition: new THREE.Vector3(-45, 4, 95), moveTarget: new THREE.Vector3(-45, 4, 95) };
+  bloom.root.position.copy(bloom.root.userData.basePosition);
+  return bloom;
 }
 
 export function createSchools(scene, collisions = null) {

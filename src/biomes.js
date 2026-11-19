@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createJellyBloom } from './jellyfish.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { seededRandom } from './core.js';
 import { REGIONS, EVENTS } from './world.js';
@@ -229,34 +230,8 @@ export function buildBiomes(scene, materials, uniforms) {
     pillars.push({ position: [horizontal, 18, -130 + gardenRandom() * 220], scale: [6 + gardenRandom() * 8, 25 + gardenRandom() * 45, 7 + gardenRandom() * 9], rotation: [0.1, gardenRandom() * 6, 0.1] });
   }
   instances(garden, rockGeometry, materials.rock, pillars);
-  const bellMaterial = new THREE.MeshPhysicalMaterial({ color: '#aac5ce', emissive: '#60919f', emissiveIntensity: 0.3, transparent: true, opacity: 0.25, side: THREE.DoubleSide, roughness: 0.34, depthWrite: false });
-  const threadMaterial = new THREE.MeshBasicMaterial({ color: '#b7c8df', transparent: true, opacity: 0.24, depthWrite: false });
-  const giantJellies = [];
-  const bellGeometry = new THREE.SphereGeometry(1, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.54);
-  const threadParts = [];
-  for (let index = 0; index < 18; index++) {
-    const angle = index / 18 * Math.PI * 2;
-    const points = [];
-    for (let section = 0; section < 16; section++) {
-      const progress = section / 15;
-      points.push(new THREE.Vector3(Math.cos(angle) * 0.87 + Math.sin(progress * 9 + angle) * progress * 0.28, -progress * (2.8 + index % 3 * 0.5), Math.sin(angle) * 0.87 + Math.cos(progress * 8) * progress * 0.25));
-    }
-    threadParts.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 24, 0.009, 3, false));
-  }
-  const threads = mergeGeometries(threadParts);
-  threadParts.forEach(part => part.dispose());
-  for (let index = 0; index < 23; index++) {
-    const jelly = new THREE.Group();
-    const size = index < 3 ? [18, 12, 9][index] : 2.5 + gardenRandom() * 5;
-    jelly.position.set(index === 0 ? -5 : (gardenRandom() - 0.5) * 180, index === 0 ? 64 : 29 + gardenRandom() * 54, index === 0 ? -37 : 30 - gardenRandom() * 170);
-    const bellMesh = mesh(jelly, bellGeometry, bellMaterial, [0, 0, 0], [1, 0.55, 1]);
-    mesh(jelly, new THREE.TorusGeometry(0.98, 0.013, 5, 64), threadMaterial, [0, -0.05, 0], [1, 1, 1], [Math.PI / 2, 0, 0]);
-    mesh(jelly, threads, threadMaterial);
-    jelly.scale.setScalar(size);
-    jelly.userData = { size, baseY: jelly.position.y, phase: index * 1.7, bellMesh };
-    garden.add(jelly);
-    giantJellies.push(jelly);
-  }
+  const jellyBloom = createJellyBloom({ count: 20, seed: 2387, span: [176, 36, 156], sizes: [2.5, 2.4] });
+  jellyBloom.root.position.set(0, 48, -45); garden.add(jellyBloom.root);
   const pathRows = [];
   for (let index = 0; index < 90; index++) {
     const progress = index / 90;
@@ -267,15 +242,8 @@ export function buildBiomes(scene, materials, uniforms) {
   let pathProgress = 0;
   animated.push((time, delta) => {
     if (!garden.visible) return;
-    giantJellies.forEach(jelly => {
-      const data = jelly.userData;
-      const phase = eventState.choir ? 0 : data.phase;
-      jelly.position.y = data.baseY + Math.sin(time * 0.25 + phase) * 2.3;
-      data.bellMesh.scale.set(1 + Math.sin(time * 1.1 + phase) * 0.055, 0.55 + Math.cos(time * 1.1 + phase) * 0.06, 1 + Math.sin(time * 1.1 + phase) * 0.055);
-      jelly.rotation.y = Math.sin(time * 0.06 + data.phase) * 0.2;
-    });
-    bellMaterial.emissiveIntensity = eventState.choir ? 0.75 + Math.sin(time * 1.1) * 0.4 : 0.3;
-    threadMaterial.opacity = eventState.choir ? 0.45 + Math.sin(time * 1.1) * 0.2 : 0.24;
+    jellyBloom.setGlow(eventState.choir);
+    jellyBloom.animate(time, delta);
     pathProgress = THREE.MathUtils.damp(pathProgress, eventState.path ? 1 : 0, 1.1, delta);
     pathMaterial.opacity = 0.1 + pathProgress * 0.9;
     eventMeshes.path.count = eventState.path ? Math.max(1, Math.round(pathProgress * 90)) : 90;
@@ -371,7 +339,7 @@ export function buildBiomes(scene, materials, uniforms) {
     groups,
     setRegion(region) { activeRegion = region; for (const [key, group] of Object.entries(groups)) group.visible = key === region; },
     setEvent(key, value) { eventState[key] = value; },
-    setColor(color) { const value = LIGHT_COLORS[color] || LIGHT_COLORS.pearl; bellMaterial.color.set(value); bellMaterial.emissive.set(value); threadMaterial.color.set(value); },
+    setColor(color) { jellyBloom.setColor(color); },
     update(time, delta) {
       for (const animate of animated) animate(time, delta);
       crownMaterial.opacity = THREE.MathUtils.damp(crownMaterial.opacity, eventState.crown ? 0.75 + Math.sin(time * 0.8) * 0.15 : 0.035, 1, delta);

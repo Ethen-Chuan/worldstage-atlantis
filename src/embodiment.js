@@ -33,6 +33,8 @@ export class Embodiment {
     const roots = [this.ocean.city, this.ocean.creationScene.root, this.ocean.ecology.root, ...Object.values(this.ocean.creatures || {}).map(creature => creature.root), ...this.ocean.landmarks.entries.map(entry => entry.root), ...[...this.ocean.wonders.entries.values()].map(entry => entry.root), ...[...this.ocean.endless.chunks.values()].map(tile => tile.ground)].filter(Boolean);
     if (this.ocean.palace) roots.push(this.ocean.palace.root);
     if (this.ocean.surface) roots.push(...this.ocean.surface.animals.map(animal => animal.root));
+    roots.push(...Object.values(this.ocean.biomes?.groups || {}));
+    for (const tile of this.ocean.endless.chunks.values()) if (tile.decorations) roots.push(tile.decorations);
     const hit = raycaster.intersectObjects(roots, true).find(hit => {
       if (hit.distance >= 850 || !hit.object.isMesh || !visible(hit.object)) return false;
       for (let ancestor = hit.object; ancestor; ancestor = ancestor.parent) if (ancestor === this.active?.root) return false;
@@ -42,13 +44,14 @@ export class Embodiment {
     let ancestor = hit.object; let creature = null; let authored = null;
     while (ancestor && ancestor !== this.ocean.scene) {
       if (ancestor === this.active?.root) return null;
-      if (ancestor.userData.creature) creature = ancestor;
+      if (ancestor.userData.creature && !creature) creature = ancestor;
       if (ancestor.userData.creationId) authored = this.ocean.creationScene.objects.get(ancestor.userData.creationId);
       ancestor = ancestor.parent;
     }
     const point = hit.point.clone().add(this.ocean.worldOffset);
     let candidate;
-    if (authored) candidate = { root: authored.root, shape: authored.shape, living: LIVING_ASSETS.includes(authored.item.asset), species: authored.item.asset, name: authored.item.name, id: authored.item.id, point };
+    if (creature?.userData.individual) candidate = { root: creature, shape: creature, living: true, species: creature.userData.creature, name: creature.userData.displayName, sourceCreationId: authored?.item.id, point };
+    else if (authored) candidate = { root: authored.root, shape: authored.shape, living: LIVING_ASSETS.includes(authored.item.asset), species: authored.item.asset, name: authored.item.name, id: authored.item.id, point };
     else if (creature) candidate = { root: creature, shape: creature, living: true, species: creature.userData.creature, name: creature.userData.displayName || ASSETS[creature.userData.creature] || '海洋生物', point };
     else if (hit.object.isInstancedMesh && hit.object.userData.creature) candidate = { root: hit.object, species: hit.object.userData.creature, living: true, name: '一尾游鱼', instance: hit.instanceId, point };
     else {
@@ -204,7 +207,7 @@ export class Embodiment {
     const forward = new THREE.Vector3(-Math.sin(this.steeringHeading), 0, -Math.cos(this.steeringHeading));
     if (keys.has('forward')) desired.add(forward); if (keys.has('back')) desired.sub(forward);
     if (keys.has('up')) desired.y += 0.65; if (keys.has('down')) desired.y -= 0.65;
-    const speed = target.species === 'whale' ? 25 : target.species === 'turtle' ? 17 : 32;
+    const speed = target.species === 'jelly' ? 7 : target.species === 'whale' ? 25 : target.species === 'turtle' ? 17 : 32;
     if (desired.lengthSq() > 1) desired.normalize(); desired.multiplyScalar(speed * (keys.has('fast') ? 1.8 : 1));
     if (this.dolphinPilot) {
       this.position.copy(this.dolphinPilot.step(this.position, this.steeringHeading, keys, delta, this.ocean.time));

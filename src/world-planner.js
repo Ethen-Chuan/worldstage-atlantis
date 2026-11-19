@@ -4,7 +4,7 @@ import { PALACE_ROOMS } from './palace-layout.js';
 import { STORY_ENTRIES, advanceStory, initialStoryState } from './tide-stories.js';
 
 const commands = new Set(['creation', 'travel', 'ritual', 'calm', 'trial', 'talk', 'sing', 'inhabit', 'release-view', 'switch-view', 'cruise', 'whale-fall', 'palace-room', 'story']);
-const speciesNames = { 鲸鱼: 'whale', 鲨鱼: 'shark', 灰礁鲨: 'shark', 海龟: 'turtle', 蝠鲼: 'manta', 美人鱼: 'mermaid', 人鱼: 'mermaid', 水母: 'jelly', 鱼群: 'shoal', 装甲古鱼: 'ancient', 古鱼: 'ancient', 鹦鹉螺: 'nautilus' };
+const speciesNames = { 鲸鱼: 'whale', 海豚: 'dolphin', 鲨鱼: 'shark', 灰礁鲨: 'shark', 海龟: 'turtle', 蝠鲼: 'manta', 美人鱼: 'mermaid', 人鱼: 'mermaid', 水母: 'jelly', 鱼群: 'shoal', 装甲古鱼: 'ancient', 古鱼: 'ancient', 鹦鹉螺: 'nautilus' };
 const summonNames = ['鲸鱼', '鲨鱼', '灰礁鲨', '蝠鲼', '海龟', '水母', '鱼群'];
 const destinations = [...LANDMARKS, ...ECOLOGY_VIEWS];
 
@@ -37,7 +37,7 @@ export function planWorld(text, context = {}) {
   if (/^(?:请)?(?:让海流平静|结束盛典|让(?:这里的|眼前的)?奇观平静下来)[。！!]*$/.test(input)) return worldAction('calm');
   const talk = input.match(/^(?:和|与|呼唤)(鲸鱼|鲨鱼|灰礁鲨|海龟|蝠鲼|美人鱼|人鱼|水母|鱼群|装甲古鱼|古鱼|鹦鹉螺)(?:对话|说话|打招呼|回应我)?[。！!]*$/);
   if (talk) return worldAction('talk', { species: speciesNames[talk[1]] });
-  const inhabit = input.match(/^(?:成为|化身为?|代入)(鲸鱼|鲨鱼|灰礁鲨|海龟|蝠鲼|美人鱼|人鱼|水母|鱼群|装甲古鱼|古鱼|鹦鹉螺)[。！!]*$/);
+  const inhabit = input.match(/^(?:成为|化身为?|代入)(鲸鱼|海豚|鲨鱼|灰礁鲨|海龟|蝠鲼|美人鱼|人鱼|水母|鱼群|装甲古鱼|古鱼|鹦鹉螺)[。！!]*$/);
   if (inhabit) return worldAction('inhabit', { species: speciesNames[inhabit[1]] });
   const trial = input.match(/^(?:开始|挑战)(?:这里的)?(?:试炼|小游戏)(?:[，,]?以(鲸鱼|鲨鱼|海龟|蝠鲼)的视角)?[。！!]*$/);
   if (trial) return worldAction('trial', { site: context.site || null, species: speciesNames[trial[1]] || 'manta' });

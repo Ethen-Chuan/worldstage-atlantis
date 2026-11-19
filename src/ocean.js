@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { jellyActors } from './jellyfish.js';
 import { SceneTap } from './scene-tap.js';
 import { WhaleFall } from './whale-fall.js';
 import { CollisionWorld } from './collision-world.js';
@@ -32,6 +33,7 @@ import { travelGaze } from './travel-gaze.js';
 import { SunsetSea } from './sunset-sea.js';
 import { FrameBudget } from './frame-budget.js';
 import { AutoNavigation } from './auto-navigation.js';
+import { WorldDayClock } from './day-cycle.js';
 
 class OceanOcclusionPass extends GTAOPass {
   render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
@@ -70,6 +72,8 @@ export class Ocean {
     this.reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.selected = 'manta';
     this.night = 0;
+    this.dayClock = new WorldDayClock();
+    this.dayCycle = this.dayClock.sample();
     this.flight = null;
     this.location = 'threshold';
     this.region = 'city';
@@ -88,6 +92,12 @@ export class Ocean {
     this.uniforms = { time: { value: 0 }, offset: { value: this.worldOffset }, night: { value: 0 }, skyTop: { value: new THREE.Color().setRGB(0.075, 0.29, 0.32) }, skyBottom: { value: new THREE.Color().setRGB(0.012, 0.04, 0.055) }, skySun: { value: 1 } };
     this.scene = new THREE.Scene();
     this.uniforms.surface = { value: 0 };
+    this.uniforms.daylight = { value: this.dayCycle.daylight };
+    this.uniforms.twilight = { value: this.dayCycle.twilight };
+    this.uniforms.solarDirection = { value: new THREE.Vector3(...this.dayCycle.direction) };
+    this.uniforms.lightColor = { value: new THREE.Color().setRGB(...this.dayCycle.lightColor, THREE.SRGBColorSpace) };
+    this.uniforms.surfaceTop = { value: new THREE.Color().setRGB(...this.dayCycle.skyTop, THREE.SRGBColorSpace) };
+    this.uniforms.surfaceHorizon = { value: new THREE.Color().setRGB(...this.dayCycle.skyHorizon, THREE.SRGBColorSpace) };
     this.scene.background = new THREE.Color('#092c3a');
     this.scene.fog = new THREE.FogExp2('#244e50', 0.0024);
     this.camera = new THREE.PerspectiveCamera(46, 1, 0.4, 1500);
@@ -201,9 +211,10 @@ export class Ocean {
       this.pointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const candidate = this.embodiment.pick(this.raycaster);
+      if (!candidate?.living && this.surface.blend > 0.5 && !this.paused && this.surface.touch(this.raycaster, this.worldOffset, this.time)) return;
       if (candidate) {
         if (candidate.palaceDestination) { this.callbacks.onPalaceDoor?.(candidate.palaceDestination); return; }
-        if (candidate.id) this.callbacks.onCreationSelect?.(candidate.id);
+        if (candidate.id || candidate.sourceCreationId) this.callbacks.onCreationSelect?.(candidate.id || candidate.sourceCreationId);
         else if (!candidate.living) this.callbacks.onAnchor?.(candidate.point.toArray());
         this.callbacks.onObjectInspect?.(candidate);
         return;
@@ -278,11 +289,14 @@ export class Ocean {
 
   syncCreation(state, instant = false) {
     this.creationScene.sync(state, instant);
+    if (!instant && state.lighting !== this.creationLighting) this.setTimeMode({ moonlit: 'night', golden: 'dusk', sunlit: 'day' }[state.lighting]);
     this.creationLighting = state.lighting;
     this.night = state.lighting === 'moonlit' ? 1 : 0;
     this.renderer.shadowMap.needsUpdate = true;
     this.occlusion.lastView = null;
   }
+
+  setTimeMode(mode) { return this.dayClock.setMode(mode); }
 
   focusCreation(id) {
     const entry = this.creationScene.objects.get(id);
@@ -608,8 +622,12 @@ export class Ocean {
     this.time += delta;
     this.lifeTime += delta * this.speed;
     this.uniforms.time.value = this.time;
-    this.uniforms.night.value = THREE.MathUtils.damp(this.uniforms.night.value, this.night, 0.9, delta);
+    if (!this.paused) this.dayCycle = this.dayClock.sample();
+    this.uniforms.night.value = THREE.MathUtils.damp(this.uniforms.night.value, this.dayCycle.night, 0.6, delta);
     const night = this.uniforms.night.value;
+    const gateVoice = this.whaleFall.sound?.gateEcho;
+    this.landmarks.voiceActive = gateVoice?.status === 'speaking';
+    this.landmarks.voiceLevel = gateVoice?.amplitude() * (this.reduced ? 0.35 : 1) || 0;
     this.embodiment.beforeSimulation();
     this.updateTravel(delta);
     const ambientNocturne = this.currentLandmark?.nocturne ?? (this.currentLandmark?.id === 'choir' ? 1 : this.currentBiome?.id === 'garden' ? 0.55 : 0);
@@ -617,23 +635,41 @@ export class Ocean {
     const ceremonyFade = this.play?.show?.ending != null ? 1 - THREE.MathUtils.smoothstep(this.time - this.play.show.ending, 0, 2.5) : 1;
     const ceremonyShade = ceremonyAge >= 0 ? THREE.MathUtils.smoothstep(ceremonyAge, 0, 5) * (1 - THREE.MathUtils.smoothstep(ceremonyAge, 28, 36)) * 0.16 * ceremonyFade : 0;
     const nocturne = Math.max(ambientNocturne, ceremonyShade);
-    const transition = this.instantLighting ? 1 : 1 - Math.exp(-realDelta * 0.7);
+    const transition = this.instantLighting ? 1 : 1 - Math.exp(-delta * 0.7);
     this.instantLighting = false;
-    this.sun.intensity = THREE.MathUtils.lerp(this.sun.intensity, (5.2 - nocturne * 3.4) * (1 - night * 0.84), transition);
-    this.sun.color.lerp(new THREE.Color(this.creationLighting === 'golden' ? '#ffd18e' : nocturne ? '#90b9d4' : '#fff0cf'), transition);
+    const surfaceLight = this.surface.blend;
+    this.sun.intensity = THREE.MathUtils.lerp(this.sun.intensity, THREE.MathUtils.lerp((5.2 - nocturne * 3.4) * (1 - night * 0.84), 0.8 + this.dayCycle.daylight * 3.6, surfaceLight), transition);
+    const cycleColor = key => new THREE.Color().setRGB(...this.dayCycle[key], THREE.SRGBColorSpace);
+    this.uniforms.lightColor.value.lerp(cycleColor('lightColor'), transition);
+    this.sun.color.lerp(this.uniforms.lightColor.value, transition);
+    this.uniforms.daylight.value = THREE.MathUtils.lerp(this.uniforms.daylight.value, this.dayCycle.daylight, transition);
+    this.uniforms.twilight.value = THREE.MathUtils.lerp(this.uniforms.twilight.value, this.dayCycle.twilight, transition);
+    this.uniforms.solarDirection.value.lerp(new THREE.Vector3(...this.dayCycle.direction), transition).normalize();
+    this.uniforms.surfaceTop.value.lerp(cycleColor('skyTop'), transition);
+    this.uniforms.surfaceHorizon.value.lerp(cycleColor('skyHorizon'), transition);
     this.hemisphere.intensity = THREE.MathUtils.lerp(this.hemisphere.intensity, 1.05 - nocturne * 0.4 - night * 0.4, transition);
     this.uniforms.skyTop.value.lerp(new THREE.Color().setRGB(0.075 - nocturne * 0.06, 0.29 - nocturne * 0.23, 0.32 - nocturne * 0.21), transition);
     this.uniforms.skyBottom.value.lerp(new THREE.Color().setRGB(0.012 - nocturne * 0.007, 0.04 - nocturne * 0.025, 0.055 - nocturne * 0.025), transition);
     this.uniforms.skySun.value = THREE.MathUtils.lerp(this.uniforms.skySun.value, 1 - nocturne * 0.83, transition);
-    this.scattering.uniforms.strength.value = THREE.MathUtils.lerp(this.scattering.uniforms.strength.value, 1.85 - nocturne * 1.4, transition);
-    this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, 0.003 + nocturne * 0.001, transition);
-    this.scene.fog.color.lerp(new THREE.Color(this.currentLandmark?.color || this.currentBiome?.color || '#21484c').lerp(new THREE.Color('#071d32'), night), transition);
+    const surfaceBlend = this.surface.blend; this.uniforms.surface.value = surfaceBlend;
+    this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, (0.0024 + nocturne * 0.0008) * (1 - surfaceBlend * 0.94), transition);
+    this.scene.fog.color.lerp(cycleColor('fog'), transition);
     this.sky.position.copy(this.camera.position);
     this.sky.userData.snow?.position.copy(this.camera.position);
-    const surfaceBlend = this.surface.blend; this.uniforms.surface.value = surfaceBlend;
-    this.scene.fog.density *= 1 - surfaceBlend * 0.94;
-    this.scattering.uniforms.strength.value *= 1 - surfaceBlend;
-    this.sun.color.lerp(new THREE.Color('#ffd394'), surfaceBlend); this.sun.intensity = THREE.MathUtils.lerp(this.sun.intensity, 3.4, surfaceBlend);
+    this.scattering.uniforms.strength.value = THREE.MathUtils.lerp(this.scattering.uniforms.strength.value, (2.3 - nocturne * 1.4) * (1 - surfaceBlend), transition);
+    this.sun.position.copy(this.camera.position).addScaledVector(this.uniforms.solarDirection.value, 290); this.sun.target.position.copy(this.camera.position).add(new THREE.Vector3(0, -20, 0));
+    this.surface.setCycle(this.dayCycle, transition);
+    this.scattering.uniforms.mist.value = (this.palace.activeRoom ? 0.1 : 0.75) * (1 - surfaceBlend);
+    this.scattering.uniforms.ground.value = seaHeight(this.worldPosition().x, this.worldPosition().z);
+    this.scattering.uniforms.mistColor.value.copy(this.scene.fog.color);
+    for (const name of ['coral', 'coralLight', 'coralPurple', 'coralRose']) {
+      this.materials[name].emissive.set(name === 'coralRose' ? '#ab527d' : '#52baa9');
+      this.materials[name].emissiveIntensity = night * (name === 'coralLight' ? 0.65 : 0.18);
+    }
+    if (this.palace.ready) {
+      this.palace.materials.light.emissiveIntensity = 0.8 + night * 1.1;
+      this.palace.materials.gardenGlow.emissiveIntensity = Math.max(this.palace.materials.gardenGlow.emissiveIntensity, 0.45 + night * 1.1);
+    }
     if (this.sky.userData.snow) this.sky.userData.snow.visible = surfaceBlend < 0.95;
     if (this.flight && delta > 0) {
       const flight = this.flight;
@@ -669,15 +705,19 @@ export class Ocean {
         }
       }
     }
+    this.whaleFall.update(delta);
+    if (this.whaleFall.active && delta > 0) { this.renderer.shadowMap.needsUpdate = true; this.occlusion.lastView = null; }
     const active = this.embodiment.active;
     const actors = [...this.creationScene.objects.values()].filter(entry => LIVING_ASSETS.includes(entry.item.asset) && !['shoal', 'jelly'].includes(entry.item.asset)).map(entry => ({ root: entry.root, shape: entry.shape, species: entry.item.asset, entry }));
     for (const animal of this.ecology.animals) actors.push({ root: animal.root, shape: animal.root, species: animal.kind });
     for (const animal of this.surface.animals) actors.push({ root: animal.root, shape: animal.root, species: 'dolphin', motion: 'surface' });
     actors.push({ root: this.ecology.ancient.root, shape: this.ecology.ancient.root, species: 'ancient' });
-    for (const [species, animal] of Object.entries(this.creatures)) actors.push({ root: animal.root, shape: animal.root, species });
+    for (const [species, animal] of Object.entries(this.creatures)) if (species !== 'jelly') actors.push({ root: animal.root, shape: animal.root, species });
     for (const entry of [...this.landmarks.entries, ...this.wonders.entries.values()]) entry.root.traverseVisible(root => {
-      if (root.userData.creature && !root.isInstancedMesh) actors.push({ root, shape: root, species: root.userData.creature });
+      if (root.userData.creature && root.userData.creature !== 'jelly' && !root.isInstancedMesh) actors.push({ root, shape: root, species: root.userData.creature });
     });
+    this.visibleJellies = jellyActors(this.scene).filter(actor => actor.root.getWorldPosition(new THREE.Vector3()).distanceTo(this.camera.position) < 220);
+    actors.push(...this.visibleJellies);
     if (active?.living && !actors.some(actor => actor.root === active.root)) actors.push(active);
     if (this.whaleFall.active && this.whaleFall.whale.root.visible) actors.push({ root: this.whaleFall.whale.root, species: 'whale', kinematic: true });
     this.collisions.rebuild([this.city, this.palace.root, this.creationScene.root, this.ecology.root, ...this.landmarks.entries.map(entry => entry.root), ...[...this.wonders.entries.values()].map(entry => entry.root), ...[...this.endless.chunks.values()].map(entry => entry.root)], this.worldOffset);
@@ -692,7 +732,6 @@ export class Ocean {
     this.embodiment.update(delta);
     this.surface.afterSimulation(this.time, this.reduced);
     this.play.update(delta);
-    this.whaleFall.update(delta);
     const beforeOrbit = this.worldPosition();
     if (!this.paused) this.controls.update(delta);
     if (!this.embodiment.blend && (!active?.living || !this.embodiment.firstPerson)) {
@@ -731,6 +770,6 @@ export class Ocean {
   }
 
   inspect() {
-    return { palace: this.palace.inspect(), surface: this.surface.inspect(), collisions: this.collisions.inspect(), whaleFall: this.whaleFall.inspect(), time: this.time, paused: this.paused, selected: this.selected, night: this.uniforms.night.value, flight: this.flight?.name || null, location: this.location, region: this.region, speed: this.speed, distances: { ...this.distances }, world: this.biomes?.inspect() || { region: 'city', events: {} }, ecology: this.ecology.inspect(), wonders: this.wonders.inspect(), creation: this.creationScene.inspect(), quality: this.quality, pixelRatio: this.renderer.getPixelRatio(), camera: this.camera.position.toArray(), creatures: Object.fromEntries(Object.entries(this.creatures).map(([key, value]) => [key, { position: value.root.position.toArray(), mode: value.root.userData.mode }])), drawCalls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, memory: { ...this.renderer.info.memory }, fps: this.lastFPS || null };
+    return { dayCycle: { ...this.dayCycle, mode: this.dayClock.mode }, palace: this.palace.inspect(), surface: this.surface.inspect(), collisions: this.collisions.inspect(), whaleFall: this.whaleFall.inspect(), time: this.time, paused: this.paused, selected: this.selected, night: this.uniforms.night.value, flight: this.flight?.name || null, location: this.location, region: this.region, speed: this.speed, distances: { ...this.distances }, world: this.biomes?.inspect() || { region: 'city', events: {} }, ecology: this.ecology.inspect(), wonders: this.wonders.inspect(), creation: this.creationScene.inspect(), quality: this.quality, pixelRatio: this.renderer.getPixelRatio(), camera: this.camera.position.toArray(), creatures: Object.fromEntries(Object.entries(this.creatures).map(([key, value]) => [key, { position: value.root.position.toArray(), mode: value.root.userData.mode }])), drawCalls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, memory: { ...this.renderer.info.memory }, fps: this.lastFPS || null };
   }
 }

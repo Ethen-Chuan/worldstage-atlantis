@@ -3,6 +3,7 @@ import { StoneWorkshop, sculptGate, sculptCoral } from './sculptures.js';
 import { createJellies, createManta } from './creatures.js';
 import { LANDMARKS } from './landmarks.js';
 import { seaHeight } from './terrain.js';
+import { createWhaleRemains } from './whale-remains.js';
 
 function whaleGarden(materials) {
   const shop = new StoneWorkshop(materials, 987);
@@ -18,17 +19,6 @@ function whaleGarden(materials) {
   }
   tableCoral.computeVertexNormals();
   const random = shop.random;
-  for (let vertebra = 0; vertebra < 25; vertebra++) {
-    const depth = (vertebra - 12) * 2.2;
-    const horizontal = Math.sin(vertebra * 0.13) * 7;
-    shop.add('rock', 'pale', [horizontal, 3.1, depth], [1.9, 1.2, 1.3], [0.1, 0, 0]);
-    if (vertebra < 4 || vertebra > 18) continue;
-    for (const side of [-1, 1]) {
-      const height = 10 + Math.sin(vertebra / 25 * Math.PI) * 8;
-      shop.tube([[horizontal, 3, depth], [horizontal + side * 7, 5, depth + 1.5], [horizontal + side * 12, 11, depth + 2.5], [horizontal + side * 11, height, depth + 2], [horizontal + side * 6, height + 3, depth + 1]], 0.55, 'pale', 14);
-    }
-  }
-  shop.add('rock', 'pale', [2, 3, -35], [5, 3, 9], [0, -0.05, 0]);
   for (let index = 0; index < 70; index++) {
     const angle = random() * Math.PI * 2;
     const radius = 19 + random() * 32;
@@ -45,7 +35,7 @@ function whaleGarden(materials) {
   }
   const root = shop.finish('garden-of-giants');
   tableCoral.dispose();
-  root.rotation.y = -0.4;
+  root.add(createWhaleRemains(materials));
   return root;
 }
 
@@ -74,6 +64,7 @@ export class LandmarkScene {
     this.entries = [];
     this.scene = scene;
     this.materials = materials;
+    this.voiceLevel = 0; this.voiceActive = false;
   }
 
   prepare(id) {
@@ -147,8 +138,10 @@ export class LandmarkScene {
       const age = time - entry.ritualStart;
       const fade = entry.ending === null ? 1 : 1 - THREE.MathUtils.smoothstep(time - entry.ending, 0, 2.5);
       const ritual = age >= 0 && age < 36 ? THREE.MathUtils.smoothstep(age, 0, 4) * (1 - THREE.MathUtils.smoothstep(age, 28, 36)) * fade : 0;
-      for (const material of entry.glyphs) material.emissiveIntensity = 0.2 + entry.activation * 1.8 + ritual * 2.2;
-      if (entry.portal) { entry.portal.material.uniforms.clock.value = time; entry.portal.material.uniforms.energy.value = ritual; entry.portal.visible = ritual > 0.001; }
+      const voice = landmark.id === 'gate' ? this.voiceLevel : 0;
+      const base = landmark.id === 'gate' && this.voiceActive ? 0.28 : 0.2 + entry.activation * 1.8 + ritual * 2.2;
+      for (const material of entry.glyphs) material.emissiveIntensity = base + voice * 4.6;
+      if (entry.portal) { entry.portal.material.uniforms.clock.value = time; entry.portal.material.uniforms.energy.value = Math.max(ritual * 0.55, voice * 0.8); entry.portal.visible = ritual > 0.001 || voice > 0.001; }
       life.setGlow?.(entry.activation > 0.3);
       if (delta > 0) life.animate(time * 0.7, delta);
       if (landmark.kind === 'garden') {

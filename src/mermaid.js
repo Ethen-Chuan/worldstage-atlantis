@@ -55,13 +55,12 @@ export function createMermaid() {
   const skin = new THREE.MeshPhysicalMaterial({ color: '#eed4cb', roughness: 0.47, metalness: 0, clearcoat: 0.12, sheen: 0.3, sheenColor: '#efbbcb' });
   const silk = new THREE.MeshPhysicalMaterial({ color: '#7ecdd1', roughness: 0.29, metalness: 0.16, iridescence: 0.8, iridescenceIOR: 1.32, iridescenceThicknessMinimum: 180, iridescenceThicknessMaximum: 420, side: THREE.DoubleSide, transparent: true, opacity: 0.63, depthWrite: false });
   const tailMaterial = new THREE.MeshPhysicalMaterial({ color: '#3d97ab', roughness: 0.34, metalness: 0.22, iridescence: 0.78, sheen: 0.5, sheenColor: '#b7ace4', clearcoat: 0.45 });
-  const hairMaterial = new THREE.MeshPhysicalMaterial({ color: '#8b9ac8', roughness: 0.39, metalness: 0.16, sheen: 0.9, sheenColor: '#c2bedf', side: THREE.DoubleSide });
+  const hairMaterial = new THREE.MeshPhysicalMaterial({ color: '#292d42', roughness: 0.48, metalness: 0, sheen: 0.75, sheenColor: '#6c789b', side: THREE.DoubleSide });
   const gold = new THREE.MeshStandardMaterial({ color: '#c6ba9b', roughness: 0.31, metalness: 0.8 });
   const pearl = new THREE.MeshPhysicalMaterial({ color: '#e2e5dc', roughness: 0.24, metalness: 0.12, iridescence: 0.9 });
-  const iris = new THREE.MeshPhysicalMaterial({ color: '#518b99', roughness: 0.17, clearcoat: 1 });
+  const iris = new THREE.MeshPhysicalMaterial({ color: '#655048', roughness: 0.24, clearcoat: 1 });
   const dark = new THREE.MeshStandardMaterial({ color: '#2b263c', roughness: 0.62 });
-  const lips = new THREE.MeshStandardMaterial({ color: '#c78592', roughness: 0.44 });
-  for (const material of [skin, pearl, iris, dark, lips, hairMaterial, gold]) material.userData.keepColor = true;
+  for (const material of [skin, pearl, iris, dark, hairMaterial, gold]) material.userData.keepColor = true;
   const timeUniform = { value: 0 };
   tailMaterial.onBeforeCompile = shader => {
     shader.uniforms.mermaidTime = timeUniform;
@@ -79,7 +78,7 @@ export function createMermaid() {
   const torso = new THREE.Mesh(new THREE.LatheGeometry(profile, 48), skin); torso.scale.z = 0.68; body.add(torso);
   const bodiceProfile = [[0.43,0.15],[0.5,0.35],[0.4,0.72],[0.34,1.02],[0.42,1.35],[0.525,1.68],[0.51,1.89]].map(([radius,height])=>new THREE.Vector2(radius,height));
   const bodice = new THREE.Mesh(new THREE.LatheGeometry(bodiceProfile, 48), tailMaterial); bodice.scale.z = 0.71; body.add(bodice);
-  const head = new THREE.Group(); head.position.set(0,2.72,-0.03); head.rotation.set(-0.04,0.1,-0.08); body.add(head);
+  const head = new THREE.Group(); head.name = 'mermaid-head'; head.position.set(0,2.72,-0.03); head.rotation.set(-0.01,0.04,-0.025); body.add(head);
   const detail = detailedFace(head,skin,pearl,iris,dark);
   const mouthOpen = { value: 0 };
   detail.face.material.onBeforeCompile = shader => {
@@ -87,11 +86,11 @@ export function createMermaid() {
     shader.vertexShader = 'uniform float mouthOpen;\n' + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nfloat jawWeight=exp(-pow(position.x/0.13,4.0))*smoothstep(0.14,0.23,-position.z)*(1.0-smoothstep(-0.16,-0.10,position.y)); transformed.y-=jawWeight*mouthOpen*0.022;');
   };
-  detail.face.material.customProgramCacheKey = () => 'mermaid-anatomical-face-1';
+  detail.face.material.customProgramCacheKey = () => 'mermaid-sculpted-face-2';
   const eyelids=[];
   for (const eye of detail.eyes) {
     eye.sclera.geometry.computeBoundingBox(); const center=eye.sclera.geometry.boundingBox.getCenter(new THREE.Vector3());
-    const lid=ellipsoid(head,skin,[center.x,center.y+0.006,center.z-0.028],[0.029,0.001,0.01],24);eyelids.push(lid);
+    const lid=ellipsoid(head,skin,[center.x,center.y+0.006,center.z-0.028],[0.033,0.001,0.014],24);eyelids.push(lid);
   }
   for(const side of [-1,1]) {
     filament(head,[[side*0.28,-0.03,-0.01],[side*0.33,-0.17,0],[side*0.31,-0.27,-0.02]],0.009,gold);
@@ -103,11 +102,14 @@ export function createMermaid() {
     const side=strand%2?-1:1;const phase=strand*2.399;const width=0.065+strand%4*0.022;
     ribbon(hair,hairMaterial,[[Math.sin(phase)*0.26,0.31,0.12+Math.cos(phase)*0.1],[side*(0.3+strand%3*0.025),-0.1,0.16],[side*(0.45+strand%5*0.08),-0.8,0.34],[side*(0.75+strand%4*0.17),-1.8-strand%3*0.2,0.5],[side*(0.92+strand%4*0.18),-2.6-strand%3*0.2,0.9]],width,phase,animated);
   }
-  for(let jewel=0;jewel<13;jewel++) {
-    const angle=(jewel/12-0.5)*2.5;const horizontal=Math.sin(angle)*0.29;
-    filament(head,[[horizontal,0.26,-Math.cos(angle)*0.22],[horizontal*1.35,0.43+Math.cos(angle)*0.04,-0.14],[horizontal*1.5,0.56-Math.abs(horizontal)*0.25,-0.09]],0.009,gold);
-    ellipsoid(head,jewel%2?pearl:iris,[horizontal*1.35,0.45,-0.15],[0.018,0.038,0.019],12);
+  const diadem = [];
+  for(let jewel=0;jewel<=24;jewel++) {
+    const angle=(jewel/24-0.5)*2.6;const horizontal=Math.sin(angle)*0.265;
+    const point=[horizontal,0.253+Math.cos(angle)*0.024,-Math.cos(angle)*0.194];diadem.push(point);
+    if(jewel%4===0)ellipsoid(head,pearl,point,[0.008,0.01,0.007],12);
   }
+  filament(head,diadem,0.005,gold);
+  ellipsoid(head,pearl,[0,0.244,-0.208],[0.014,0.025,0.008],20);
   const arms=[];
   for(const side of [-1,1]) {
     const shoulder=new THREE.Group();shoulder.position.set(side*0.46,1.98,0);body.add(shoulder);
@@ -138,7 +140,7 @@ export function createMermaid() {
   for (const group of [body, head, ...arms.flatMap(arm => [arm.shoulder, arm.forearm])]) mergeStillMeshes(group, movingMeshes);
   return {root,animate(time){
     timeUniform.value=time;body.rotation.x=-0.15+Math.sin(time*0.38)*0.13;body.rotation.z=Math.sin(time*0.32)*0.06;
-    head.rotation.y=0.1+Math.sin(time*0.3)*0.14;head.rotation.z=-0.08+Math.sin(time*0.43)*0.035;
+    head.rotation.y=0.04+Math.sin(time*0.3)*0.11;head.rotation.z=-0.025+Math.sin(time*0.43)*0.025;
     const blink=time%5.8; const closure=blink>5.4?Math.sin((blink-5.4)/0.4*Math.PI):0;eyelids.forEach(lid=>{lid.visible=closure>0.01;lid.scale.y=0.034*Math.max(0,closure);});
     mouthOpen.value=root.userData.singing?0.5+Math.sin(time*7)*0.5:0;
     arms.forEach(({shoulder,forearm,hand,side})=>{shoulder.rotation.z=side*(0.38+Math.sin(time*0.53+side)*0.18);shoulder.rotation.x=-0.13+Math.sin(time*0.44+side)*0.18;forearm.rotation.x=-0.3+Math.sin(time*0.57+side)*0.2;forearm.rotation.z=side*0.16;hand.rotation.x=Math.sin(time*0.67+side)*0.14;hand.rotation.z=side*Math.sin(time*0.37)*0.07;});

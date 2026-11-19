@@ -1,5 +1,5 @@
 import { ASSETS, COLORS, LIVING_ASSETS, initialCreation } from './creation.js';
-import { LANDMARKS } from './landmarks.js';
+import { ATLAS_SITES } from './landmarks.js';
 
 export const MEMORY_KEY = 'worldstage.world.v1';
 export const MEMORY_LIMIT = 40000;
@@ -16,7 +16,7 @@ export function readMemory(raw) {
   if (!Array.isArray(value.entities) || value.entities.length > 20 || !['sunlit', 'moonlit', 'golden'].includes(value.lighting)) fail();
   if (!exactKeys(value.view, ['position', 'target']) || !vector(value.view.position) || !vector(value.view.target)) fail();
   if (Math.hypot(...value.view.position.map((part, index) => part - value.view.target[index])) < 0.5) fail();
-  if (!Array.isArray(value.visited) || value.visited.length > LANDMARKS.length || value.visited.some(id => !LANDMARKS.some(landmark => landmark.id === id))) fail();
+  if (!Array.isArray(value.visited) || value.visited.length > ATLAS_SITES.length || value.visited.some(id => !ATLAS_SITES.some(landmark => landmark.id === id))) fail();
   const ids = new Set();
   for (const item of value.entities) {
     if (!exactKeys(item, ['id', 'asset', 'position', 'params', 'orbit', 'resonance', 'following', 'preset', ...(value.version === 2 ? ['leader'] : [])])) fail();

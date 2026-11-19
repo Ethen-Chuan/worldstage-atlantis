@@ -119,7 +119,7 @@ export class CreationScene {
       if (ids.has(id) && state.entities.find(item => item.id === id)?.asset === entry.item.asset) continue;
       this.root.remove(entry.root);
       entry.materials.forEach(material => material.dispose());
-      if (entry.ownsGeometry) entry.root.traverse(object => object.geometry?.dispose());
+      if (entry.ownsGeometry && entry.item.asset !== 'jelly') entry.root.traverse(object => object.geometry?.dispose());
       this.objects.delete(id);
     }
     for (const item of state.entities) {

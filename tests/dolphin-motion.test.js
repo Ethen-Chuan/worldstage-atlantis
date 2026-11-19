@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { dolphinPath, SEA_LEVEL, DOLPHIN_GRAVITY, DOLPHIN_CYCLE, waveHeight, waterCrossing, DolphinPilot } from '../src/dolphin-motion.js';
 import { SunsetSea, createDolphin } from '../src/sunset-sea.js';
 import { CollisionWorld, actorHull } from '../src/collision-world.js';
-import { BreachEffects } from '../src/breach-effects.js';
+import { BreachEffects, SPLASH_PARTICLES } from '../src/breach-effects.js';
 
 test('dolphins accelerate below water, follow a ballistic flight, enter head-first and recover underwater', () => {
   const first = dolphinPath(0, 0); const midpoint = first.launch + first.flightDuration / 2;
@@ -123,6 +123,17 @@ test('water renders before foam, droplets sink out of view, and the effects pool
   const surface = new SunsetSea(new THREE.Scene()); assert.equal(surface.water.renderOrder, -20);
   const crossing = { position: new THREE.Vector3(0, 190, 0), time: 1, entering: true, velocity: new THREE.Vector3(0, -12, -14) };
   for (let index = 0; index < 50; index++) surface.effects.emit(crossing);
-  assert.equal(surface.effects.events.length, 12); assert.equal(surface.effects.spray.geometry.attributes.position.count, 336);
+  assert.equal(surface.effects.events.length, 12); assert.equal(surface.effects.spray.geometry.attributes.position.count, 12 * SPLASH_PARTICLES);
   assert.match(surface.effects.spray.material.vertexShader, /life\*=smoothstep/);
+});
+
+test('both water crossings raise visible crown sheets and foam, with stronger reentry and bounded lifetime', () => {
+  const effects = new BreachEffects(new THREE.Group()); const position = new THREE.Vector3(0, 190, 0);
+  effects.emit({ position, time: 2, entering: false, velocity: new THREE.Vector3(0, 12, -14) });
+  effects.emit({ position, time: 2, entering: true, velocity: new THREE.Vector3(0, -12, -14) });
+  effects.update(2.25, false);
+  for (const event of effects.events.slice(0, 2)) { assert.ok(event.crown.visible); assert.ok(event.mesh.visible); assert.equal(event.crown.position.y, event.mesh.position.y); }
+  assert.ok(effects.events[1].crown.material.uniforms.strength.value > effects.events[0].crown.material.uniforms.strength.value);
+  effects.update(2.25, true); assert.equal(effects.events[1].crown.material.uniforms.age.value, 0.25);
+  effects.update(5, false); assert.ok(effects.events.every(event => !event.crown.visible && !event.mesh.visible));
 });

@@ -259,13 +259,18 @@ function foundation(shop) {
       const angle = (-83 + segment * 8.2) * Math.PI / 180;
       const reach = 153 + Math.sin(segment * 3.7) * 7;
       const horizontal = side * Math.cos(angle) * reach; const depth = -35 + Math.sin(angle) * reach;
+      if (depth > 50 && Math.abs(horizontal) < 38) continue;
       shop.add('reefRock', segment % 3 ? 'reef' : 'agedStone', [horizontal, -18 - Math.sin(segment * 2.1) * 2.3, depth], [11 + segment % 4 * 2, 10 + segment % 3, 13 + segment % 5], [0.1, angle, 0.12], true, '侵蚀礁岩基座');
       if (segment % 3 !== 0) continue;
+      const rockMatrix = shop.transform.matrix.clone(); const vertices = shop.geometries.reefRock.attributes.position;
+      const summit = new THREE.Vector3(0, -Infinity, 0); const vertex = new THREE.Vector3();
+      for (let index = 0; index < vertices.count; index++) { vertex.fromBufferAttribute(vertices, index).applyMatrix4(rockMatrix); if (vertex.y > summit.y) summit.copy(vertex); }
+      const base = summit.clone(); base.y -= 0.12;
       for (let branch = 0; branch < 5; branch++) {
-        const start = [horizontal, -1.5, depth];
-        const end = [horizontal + Math.sin(branch * 2.4) * 3, 1.5 + branch * 0.65, depth + Math.cos(branch * 2.4) * 2];
-        beam(shop, start, end, 0.2, 'reefCoral', '礁缝附生珊瑚');
-        beam(shop, end, [end[0] + Math.sin(branch) * 1.6, end[1] + 1.1, end[2] + 0.8], 0.12, 'reefCoral');
+        const end = [base.x + Math.sin(branch * 2.4) * 2.2, base.y + 2.4 + branch * 0.45, base.z + Math.cos(branch * 2.4) * 1.5];
+        beam(shop, base.toArray(), end, 0.16, 'reefCoral', '礁缝附生珊瑚');
+        shop.add('bead', 'reefCoral', end, [0.17, 0.17, 0.17]);
+        beam(shop, end, [end[0] + Math.sin(branch) * 1.2, end[1] + 0.9, end[2] + 0.5], 0.09, 'reefCoral', '礁缝珊瑚末梢');
       }
     }
   }

@@ -41,6 +41,12 @@ export function attachSwimming(root, settings) {
       materials.set(original, material);
     }
     object.material = materials.get(original);
+    if (settings.shadow) {
+      const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+      depth.onBeforeCompile = shader => { shader.uniforms.swimTime = time; shader.uniforms.swimStrength = strength; shader.vertexShader = declarations + shader.vertexShader; shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\ntransformed.${axis} += swimCurve(position.z).x;`); };
+      depth.customProgramCacheKey = () => `swim-depth-${JSON.stringify(settings)}`;
+      object.customDepthMaterial = depth; object.castShadow = true;
+    }
   }
   root.traverse(object => { if (object.isMesh) object.userData.noAO = true; });
   return { update(clock, amplitude = 1) { time.value = clock; strength.value = amplitude; }, sample(depth, clock, amplitude = 1) { const wave = swimWave(depth, clock, settings); return { offset: wave.offset * amplitude, slope: wave.slope * amplitude }; } };

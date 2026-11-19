@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GateEcho } from '../src/gate-echo.js';
+import { GateEcho, voiceEnvelope } from '../src/gate-echo.js';
 import { gateText, hasAudiblePCM } from '../gate-voice.js';
 import { planWorld, validateWorldPlan } from '../src/world-planner.js';
 import { gateInvocation, GATE_LINES } from '../src/gate-language.js';
@@ -12,6 +12,17 @@ function fixture() {
   const sound = { enabled: true, context: { currentTime: 1, state: 'running', async decodeAudioData() { return { duration: 1 }; }, createBufferSource: node, createBiquadFilter: node, createGain: node, createDelay: node }, levels: { music: 0.8 }, musicGain: node(), effectsGain: node(), reverb: node(), onChange() {}, creatureAudio: { restoreMusic() {} } };
   return { sound, echo: new GateEcho(sound) };
 }
+
+test('gate light follows PCM syllable energy and the audio clock, including silence and mute', () => {
+  const samples = new Float32Array(22050 * 3);
+  for (let index = 22050 / 2; index < 22050; index++) samples[index] = Math.sin(index * 0.2) * 0.4;
+  const envelope = voiceEnvelope({ sampleRate: 22050, duration: 3, numberOfChannels: 1, getChannelData: () => samples });
+  assert.equal(envelope[10], 0); assert.ok(envelope[45] > 0.8); assert.ok(envelope[160] < 0.001);
+  const { echo, sound } = fixture(); echo.status = 'speaking'; echo.envelope = envelope; echo.startedAt = 1;
+  sound.context.currentTime = 0.9; assert.equal(echo.amplitude(), 0); sound.context.currentTime = 1.75; assert.ok(echo.amplitude() > 0.8);
+  sound.context.state = 'suspended'; assert.equal(echo.amplitude(), 0); sound.context.state = 'running'; sound.levels.effects = 0; assert.equal(echo.amplitude(), 0);
+  sound.levels.effects = 0.65; sound.userMuted = true; assert.equal(echo.amplitude(), 0); echo.stop(); assert.equal(echo.amplitude(), 0);
+});
 
 test('gate text is bounded plain text, including option-looking text, never a shell command', () => {
   assert.equal(gateText(' --help '), '--help'); assert.equal(gateText(' 古城 '), '古城');

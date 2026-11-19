@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { StoneWorkshop, sculptArch, sculptCoral } from './sculptures.js';
 import { CHUNK_SIZE, activeChunks, biomeAt, seaHeight, worldHash, chunkLandmarks } from './terrain.js';
 import { withinLandmark } from './landmarks.js';
+import { createJellyBloom, animateJellyDrift } from './jellyfish.js';
 
 function smallPalace(materials) {
   const shop = new StoneWorkshop(materials);
@@ -11,23 +12,7 @@ function smallPalace(materials) {
   shop.dome(0, 51, 0, 11, 12);
   return shop.finish('unremembered-palace');
 }
-function jellyGrove(materials) {
-  const root = new THREE.Group();
-  const bell = new THREE.SphereGeometry(1, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.53);
-  const material = new THREE.MeshStandardMaterial({ color: '#c9c1b5', emissive: '#78a5b2', emissiveIntensity: 0.42, roughness: 0.55, transparent: true, opacity: 0.65, side: THREE.DoubleSide, depthWrite: false });
-  const filament = new THREE.MeshBasicMaterial({ color: '#acc2c1', transparent: true, opacity: 0.45, depthWrite: false });
-  for (let index = 0; index < 7; index++) {
-    const offset = new THREE.Vector3(Math.sin(index * 2.4) * 15, 18 + index * 4, Math.cos(index * 2.4) * 12);
-    const size = 2.2 + index * 0.25;
-    const mesh = new THREE.Mesh(bell, material); mesh.position.copy(offset); mesh.scale.set(size, size * 0.7, size); root.add(mesh);
-    for (let thread = 0; thread < 5; thread++) {
-      const angle = thread / 5 * Math.PI * 2;
-      const points = Array.from({ length: 8 }, (_, part) => new THREE.Vector3(Math.cos(angle) * size * 0.7 + Math.sin(part * 0.7) * part * 0.12, -part * 1.1, Math.sin(angle) * size * 0.7));
-      const strand = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 12, 0.035, 4, false), filament); strand.position.copy(offset); root.add(strand);
-    }
-  }
-  return root;
-}
+
 
 export class EndlessOcean {
   constructor(scene, materials) {
@@ -40,7 +25,9 @@ export class EndlessOcean {
     this.centerKey = '';
     this.pending = [];
     this.tilesBuilt = 0;
-    this.templates = { temple: smallPalace(materials), arch: sculptArch(materials), coral: sculptCoral(materials), jelly: jellyGrove(materials) };
+    this.jellyBloom = createJellyBloom({ count: 7, span: [42, 24, 42], sizes: [1.8, 1.2] });
+    for (const jelly of this.jellyBloom.jellies) { jelly.userData.base[1] += 24; jelly.position.fromArray(jelly.userData.base); }
+    this.templates = { temple: smallPalace(materials), arch: sculptArch(materials), coral: sculptCoral(materials), jelly: this.jellyBloom.root };
     this.rock = new THREE.IcosahedronGeometry(1, 2);
     this.column = new THREE.CylinderGeometry(0.8, 1, 1, 12);
     this.transform = new THREE.Object3D();
@@ -124,6 +111,7 @@ export class EndlessOcean {
   }
 
   update(globalPosition, offset, time = 0, eager = false) {
+    this.jellyBloom.animate(time);
     this.offset.copy(offset);
     const desired = activeChunks(globalPosition.x, globalPosition.z);
     const key = desired[0].key;
@@ -148,7 +136,7 @@ export class EndlessOcean {
       tile.root.position.set(tile.horizontal * CHUNK_SIZE - offset.x, -offset.y, tile.depth * CHUNK_SIZE - offset.z);
       const distance = Math.hypot((tile.horizontal + 0.5) * CHUNK_SIZE - globalPosition.x, (tile.depth + 0.5) * CHUNK_SIZE - globalPosition.z);
       tile.decorations.visible = distance < 540;
-      for (const object of tile.decorations.children) if (object.userData.jelly) object.position.y = object.userData.baseY + Math.sin(time * 0.45 + tile.horizontal) * 1.1;
+      for (const object of tile.decorations.children) if (object.userData.jelly) for (const jelly of object.children) animateJellyDrift(jelly, time);
     }
     return biomeAt(globalPosition.x, globalPosition.z);
   }

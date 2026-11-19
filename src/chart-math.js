@@ -1,4 +1,4 @@
-import { LANDMARKS } from './landmarks.js';
+import { ATLAS_SITES } from './landmarks.js';
 
 export const planarDistance = (first, second) => Math.hypot(first[0] - second[0], first[2] - second[2]);
 export const formatDistance = distance => distance >= 1000 ? `${(distance / 1000).toFixed(2)} km` : `${Math.round(distance)} m`;
@@ -28,7 +28,7 @@ export function unprojectChart(point, view) {
 }
 
 export function fitChart(position, width, height) {
-  const points = [...LANDMARKS.map(landmark => landmark.center), position];
+  const points = [...ATLAS_SITES.map(landmark => landmark.center), position];
   const minimumX = Math.min(...points.map(point => point[0]));
   const maximumX = Math.max(...points.map(point => point[0]));
   const minimumZ = Math.min(...points.map(point => point[2]));

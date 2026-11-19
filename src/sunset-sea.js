@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { smoothBody, attachSwimming } from './swim.js';
 import { dolphinPath, SEA_LEVEL, waterCrossing } from './dolphin-motion.js';
 import { BreachEffects } from './breach-effects.js';
+import { dayCycleAt } from './day-cycle.js';
 
 export { dolphinPath, SEA_LEVEL } from './dolphin-motion.js';
 
@@ -40,7 +41,7 @@ export class SunsetSea {
     const geometry = new THREE.PlaneGeometry(2800, 2800, 96, 96); geometry.rotateX(-Math.PI / 2);
     const material = new THREE.ShaderMaterial({
       side: THREE.DoubleSide, transparent: true, depthWrite: false,
-      uniforms: { time: { value: 0 }, seaLevel: { value: SEA_LEVEL }, visibility: { value: 0 }, worldOffset: { value: new THREE.Vector3() } },
+      uniforms: { time: { value: 0 }, seaLevel: { value: SEA_LEVEL }, visibility: { value: 0 }, worldOffset: { value: new THREE.Vector3() }, solarDirection: { value: new THREE.Vector3(-0.12, 0.8, -1).normalize() }, lightColor: { value: new THREE.Color('#fff0cf') }, waterDeep: { value: new THREE.Color('#145968') }, waterHorizon: { value: new THREE.Color('#78acba') }, night: { value: 0 }, ripples: { value: Array.from({ length: 6 }, () => new THREE.Vector4(0, 0, -100, 0)) } },
       vertexShader: `uniform float time; uniform vec3 worldOffset; varying vec3 seaPoint; varying vec3 seaNormal;
       void main(){vec3 point=position;vec4 world=modelMatrix*vec4(point,1.0);
         vec2 absolutePoint=world.xz+worldOffset.xz;
@@ -49,7 +50,7 @@ export class SunsetSea {
         seaNormal=normalize(vec3(-cos(first)*0.049-cos(second)*0.036,1.0,-cos(first)*0.033+cos(second)*0.026));
         seaPoint=world.xyz;gl_Position=projectionMatrix*viewMatrix*world;
       }`,
-      fragmentShader: `uniform float time; uniform float seaLevel; uniform float visibility; uniform vec3 worldOffset; varying vec3 seaPoint; varying vec3 seaNormal;
+      fragmentShader: `uniform float time; uniform float seaLevel; uniform float visibility; uniform vec3 worldOffset; uniform vec3 solarDirection; uniform vec3 lightColor; uniform vec3 waterDeep; uniform vec3 waterHorizon; uniform float night; uniform vec4 ripples[6]; varying vec3 seaPoint; varying vec3 seaNormal;
       void main(){
         vec3 view=normalize(cameraPosition-seaPoint);vec3 normal=normalize(seaNormal);
         vec2 detail=(seaPoint.xz+worldOffset.xz)*0.7;
@@ -57,10 +58,20 @@ export class SunsetSea {
         bool above=cameraPosition.y+worldOffset.y>seaLevel;
         if(!above)normal=-normal;
         float fresnel=pow(1.0-max(0.0,dot(normal,view)),4.0);
-        vec3 reflected=reflect(-view,normal);vec3 sun=normalize(vec3(-0.12,0.065,-1.0));
+        vec3 reflected=reflect(-view,normal);vec3 sun=normalize(solarDirection);
         float glint=pow(max(0.0,dot(reflected,sun)),150.0);float band=pow(max(0.0,dot(reflected,sun)),10.0);
-        vec3 color=mix(vec3(0.035,0.11,0.14),vec3(0.22,0.28,0.29),fresnel);
-        color+=vec3(1.0,0.53,0.12)*(glint*2.8+band*0.24);
+        vec3 color=mix(waterDeep,waterHorizon,fresnel);
+        float cloud=sin(detail.x*0.009+time*0.004)*sin(detail.y*0.012-time*0.006);
+        color*=0.89+cloud*0.11;
+        color+=lightColor*(glint*2.8+band*0.24)*(1.0-night*0.6);
+        float crest=pow(max(0.0,sin(detail.x*0.12+detail.y*0.07-time*0.65)),24.0)*pow(max(0.0,cos(detail.y*0.31+time*0.18)),6.0);
+        color+=mix(vec3(0.12,0.19,0.19),vec3(0.02,0.2,0.24),night)*crest*0.22;
+        for(int index=0;index<6;index++){
+          float age=time-ripples[index].z;float radius=length(seaPoint.xz+worldOffset.xz-ripples[index].xy);
+          float ring=exp(-pow((radius-age*5.5)/0.55,2.0));
+          float fade=step(0.0,age)*(1.0-smoothstep(1.0,4.0,age))*smoothstep(0.0,0.2,age);
+          color+=mix(lightColor*0.32,vec3(0.04,0.85,0.78),night)*ring*fade*ripples[index].w;
+        }
         if(!above)color=mix(vec3(0.025,0.15,0.19),color,0.45)+vec3(0.18,0.22,0.12)*pow(max(0.0,-view.y),4.0);
         float opacity=above?1.0:visibility*(1.0-smoothstep(450.0,1150.0,distance(cameraPosition,seaPoint)));
         gl_FragColor=vec4(color,opacity);
@@ -68,6 +79,24 @@ export class SunsetSea {
     });
     this.water = new THREE.Mesh(geometry, material); this.water.renderOrder = -20; this.water.userData.noPick = true; this.water.userData.noAO = true; this.water.frustumCulled = false; this.root.add(this.water);
     this.effects = new BreachEffects(this.root);
+    this.rippleCount = 0; this.setCycle(dayCycleAt(12), 1);
+  }
+  setCycle(cycle, blend = 1) {
+    const uniforms = this.water.material.uniforms; this.cycle = cycle.phase;
+    for (const key of ['lightColor', 'waterDeep', 'waterHorizon']) uniforms[key].value.lerp(new THREE.Color().setRGB(...cycle[key], THREE.SRGBColorSpace), blend);
+    uniforms.solarDirection.value.lerp(new THREE.Vector3(...cycle.direction), blend).normalize();
+    uniforms.night.value = THREE.MathUtils.lerp(uniforms.night.value, cycle.night, blend);
+  }
+  touch(raycaster, offset, time) {
+    if (this.blend < 0.5 || raycaster.ray.direction.y >= -0.02) return false;
+    const point = raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), offset.y - SEA_LEVEL), new THREE.Vector3());
+    if (!point || point.distanceTo(raycaster.ray.origin) > 450) return false;
+    const creature = raycaster.intersectObjects(this.animals.filter(animal => animal.root.visible).map(animal => animal.root), true)[0];
+    if (creature && creature.distance < point.distanceTo(raycaster.ray.origin) + 8) return false;
+    if (time - (this.lastTouch ?? -100) < 0.18) return true;
+    this.lastTouch = time; point.add(offset);
+    this.water.material.uniforms.ripples.value[this.rippleCount++ % 6].set(point.x, point.z, time, 1);
+    return true;
   }
   prepare() {
     if (this.animals.length) return;
@@ -102,5 +131,5 @@ export class SunsetSea {
     }
     this.effects.update(time, reduced);
   }
-  inspect() { return { level: SEA_LEVEL, blend: this.blend, dolphins: this.animals.length, splashes: this.effects.count, stages: this.animals.map(animal => animal.path?.stage), poses: this.animals.map(animal => ({ position: animal.root.position.toArray(), pitch: animal.root.rotation.x, heading: animal.root.rotation.y })) }; }
+  inspect() { return { level: SEA_LEVEL, blend: this.blend, cycle: this.cycle, ripples: this.rippleCount, dolphins: this.animals.length, splashes: this.effects.count, stages: this.animals.map(animal => animal.path?.stage), poses: this.animals.map(animal => ({ position: animal.root.position.toArray(), pitch: animal.root.rotation.x, heading: animal.root.rotation.y })) }; }
 }
