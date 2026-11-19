@@ -625,7 +625,7 @@ export class Ocean {
     }
     this.creationScene.update(delta, this.reduced, { position: this.worldPosition(), forward: this.camera.getWorldDirection(new THREE.Vector3()) });
     if (delta > 0) {
-      if (this.city.visible) this.updateFish(this.time);
+      if (this.city.visible) this.updateFish(this.time, delta);
       for (let index = this.pulses.length - 1; index >= 0; index--) {
         const pulse = this.pulses[index];
         const age = this.time - pulse.start;

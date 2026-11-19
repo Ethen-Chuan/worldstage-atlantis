@@ -38,7 +38,7 @@ export function initialCreation() {
       entity('form-01', 'temple', [20, -7, -167], { scale: 2.1, color: 'gold', weathering: 0.42 }, true),
       entity('form-02', 'trident', [-8, -5, 21], { scale: 1.1, color: 'gold' }, true),
       entity('form-03', 'coral', [-37, -6, 59], { scale: 1.2, color: 'gold' }, true),
-      entity('form-04', 'whale', [-5, 65, -36], { scale: 1.5, color: 'teal', speed: 0.6 }, true),
+      entity('form-04', 'whale', [12, 96, -86], { scale: 1.5, color: 'teal', speed: 0.6 }, true),
     ], selected: null, lastCreated: [], focused: {}, nextId: 5, lighting: 'sunlit', paused: false, past: [], future: [], revision: 0, anchor: null, viewpoint: null,
   };
 }

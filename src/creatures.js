@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { seededRandom } from './core.js';
 import { organicSurface } from './creature-surface.js';
 import { smoothBody, attachSwimming } from './swim.js';
+import { schoolTarget } from './habitat-motion.js';
+import { SchoolMotion } from './school-motion.js';
 
 function mesh(geometry, material, position = [0, 0, 0], scale = [1, 1, 1]) {
   const object = new THREE.Mesh(geometry, material);
@@ -290,20 +292,17 @@ export function createSchools(scene, collisions = null) {
   school.frustumCulled = false;
   const transform = new THREE.Object3D();
   const random = seededRandom(399);
-  const fish = Array.from({ length: count }, (_, index) => ({ phase: random() * Math.PI * 2, radius: 5 + random() * 9, height: (random() - 0.5) * 7, group: index % 4, size: 0.3 + random() * 0.55 }));
+  const fish = Array.from({ length: count }, (_, index) => ({ phase: random() * Math.PI * 2, radius: 5 + random() * 12, height: (random() - 0.5) * 7, group: index % 6, size: 0.3 + random() * 0.55 }));
+  const motion = new SchoolMotion();
+  school.userData.noAO = true;
+  school.name = 'outer-city-school-lanes';
   scene.add(school);
-  return time => {
+  return (time, delta) => {
+    motion.begin(fish, delta);
     fish.forEach((item, index) => {
-      const angle = item.phase + time * (0.07 + item.group * 0.014);
-      const centers = [[-36, 37, 42], [48, 32, -68], [-20, 65, -115], [20, 18, 118]];
-      const center = centers[item.group];
-      transform.position.set(center[0] + Math.cos(angle) * item.radius * 1.8, center[1] + item.height + Math.sin(time * 0.5 + item.phase) * 0.45, center[2] + Math.sin(angle) * item.radius);
-      if (collisions) {
-        const target = collisions.avoidSmall(transform.position, item.size);
-        transform.position.copy(collisions.move(item.position || target, target, { radius: item.size, dynamic: false }));
-        item.position = transform.position.clone();
-      }
-      transform.rotation.set(0, -angle, Math.sin(time * 5 + item.phase) * 0.07);
+      schoolTarget(item, time, 'city', [0, 0, 0], transform.position);
+      transform.position.copy(motion.advance(item, transform.position, delta, collisions));
+      transform.rotation.set(0, item.renderHeading ?? item.heading, Math.sin(time * 2 + item.phase) * 0.035);
       transform.scale.setScalar(item.size);
       transform.updateMatrix();
       school.setMatrixAt(index, transform.matrix);

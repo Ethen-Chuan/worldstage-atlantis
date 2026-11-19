@@ -69,7 +69,7 @@ document.querySelector('#app').innerHTML = `
   </main>`;
 
 const elements = Object.fromEntries([...document.querySelectorAll('[id]')].map(element => [element.id, element]));
-document.querySelector('.edition small').textContent = '0.14.0 · 初次造物';
+document.querySelector('.edition small').textContent = '0.14.1 · 潮流分层';
 let state = initialCreation();
 let journeyState = initialState();
 let ocean;

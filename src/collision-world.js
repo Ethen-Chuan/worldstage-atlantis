@@ -4,6 +4,9 @@ import { seaHeight } from './terrain.js';
 const CELL_SIZE = 20;
 const SKIN = 0.035;
 const PROFILES = {
+  ancient: [[0, 0, -11, 3], [0, 0, -7, 4.5], [0, 0, -2, 4.4], [0, 0, 3, 3.7], [0, 0, 7, 2.7], [0, 0, 11, 1.8], [0, 0, 16, 2.4], [0, 4, 17, 3.2], [0, -4, 17, 3.2], [0, 7, 17, 2.5], [0, -7, 17, 2.5], [-7, -2.5, -2, 3.8], [7, -2.5, -2, 3.8], [-11, -3, -1, 3.2], [11, -3, -1, 3.2], [0, 6, 3, 3.4]],
+  turtle: [[0, 0.15, -0.8, 2.1], [0, 0.15, 0.9, 2], [0, 0, -3, 0.8], [-3, 0, 0, 1.7], [3, 0, 0, 1.7], [-4.4, 0, 1.5, 1.8], [4.4, 0, 1.5, 1.8], [-2.5, 0, 3, 1.3], [2.5, 0, 3, 1.3]],
+  nautilus: [[0, 0, 0, 1.7], [0, -0.5, -1.3, 0.9], [0, -0.9, -2.7, 1.4]],
   whale: [[0, 0, -13, 2.9], [0, 0, -9, 4], [0, 0, -4, 4.3], [0, 0, 1, 4], [0, 0, 6, 3.2], [0, 0, 10, 2.7], [0, 0, 14, 2.5], [0, 0, 18, 3], [-6, -3, -2, 3.5], [6, -3, -2, 3.5], [-10, -5, 1, 3.4], [10, -5, 1, 3.4], [-4, 0, 19, 3.7], [4, 0, 19, 3.7]],
   shark: [[0, 0, -4.6, 1.4], [0, 0, -2.2, 1.5], [0, 0, 0, 1.5], [0, 0, 2.5, 1.3], [0, 0.6, 6, 2.7], [0, 1.8, -1.2, 1.7], [-2.1, -0.8, -0.4, 1.9], [2.1, -0.8, -0.4, 1.9]],
   mermaid: [[0, 2.9, 0, 0.7], [0, 1.3, 0, 1], [0, -0.7, 0.2, 1], [0, -2.5, 0.7, 1], [0.3, -4, 1.6, 1], [-1.4, -5.6, 2.2, 1.7], [1.4, -5.6, 2.2, 1.7]],
@@ -141,7 +144,7 @@ export class CollisionWorld {
       const desired = actor.root === active?.root && active.position ? active.position.clone() : actor.root.getWorldPosition(new THREE.Vector3()).add(offset);
       const previous = this.previous.get(actor.root);
       const position = previous && actor.root !== active?.root && !actor.kinematic && previous.desired.distanceToSquared(desired) <= 25600 ? previous.position.clone() : desired.clone();
-      this.bodies.set(actor.root, { actor, hull, position, desired, extent: Math.max(...hull.map(probe => probe.offset.length() + probe.radius)) });
+      this.bodies.set(actor.root, { actor, hull, position, desired, velocity: previous?.velocity || new THREE.Vector3(), extent: Math.max(...hull.map(probe => probe.offset.length() + probe.radius)) });
     }
   }
 
@@ -217,21 +220,50 @@ export class CollisionWorld {
     return result;
   }
 
+  anticipate(body, velocity) {
+    const steering = new THREE.Vector3(); const relative = new THREE.Vector3(); const separation = new THREE.Vector3();
+    let strongest = 0;
+    for (const other of this.bodies.values()) {
+      if (other === body || body.position.distanceToSquared(other.position) > (body.extent + other.extent + 36) ** 2) continue;
+      relative.copy(velocity).sub(other.velocity || new THREE.Vector3());
+      for (const probe of body.hull) for (const neighbor of other.hull) {
+        separation.copy(body.position).add(probe.offset).sub(other.position).sub(neighbor.offset);
+        const approach = separation.dot(relative);
+        const horizon = approach < 0 ? Math.min(2, -approach / Math.max(0.01, relative.lengthSq())) : 0;
+        separation.addScaledVector(relative, horizon);
+        const clearance = probe.radius + neighbor.radius + 3;
+        const distance = separation.length();
+        const pressure = Math.max(0, 1 - distance / clearance);
+        if (pressure <= strongest) continue;
+        strongest = pressure;
+        const side = new THREE.Vector3(-velocity.z, 0, velocity.x);
+        if (side.lengthSq() < 0.001) side.set(body.actor.root.id < other.actor.root.id ? -1 : 1, 0, 0);
+        side.normalize();
+        if (distance > 0.01) separation.divideScalar(distance); else separation.copy(side);
+        steering.copy(separation).addScaledVector(side, 0.85).normalize().multiplyScalar(pressure * 6);
+      }
+    }
+    return steering;
+  }
+
   natural(actor, offset, delta) {
     const body = this.bodies.get(actor.root);
     if (!body || !(delta > 0)) return null;
     const desired = body.desired.clone(); const previous = this.previous.get(actor.root);
     const relocated = !previous || previous.desired.distanceTo(desired) > 160;
+    const step = Math.min(delta, 0.1);
+    const shape = actor.shape || actor.root;
+    if (!relocated && previous.rotation) { shape.rotation.copy(previous.rotation); body.hull = actorHull(actor); }
     let start = relocated ? desired.clone() : previous.position.clone();
     if (relocated) {
       for (let attempt = 0; attempt < 120 && this.penetration(start, body.hull, actor.root) > 0; attempt++) start.y += 2;
     }
     const direction = desired.clone().sub(start);
-    const maxSpeed = actor.species === 'dolphin' ? 27 : actor.species === 'whale' ? 22 : actor.species === 'shark' ? 18 : 11;
+    const maxSpeed = actor.species === 'dolphin' ? 27 : actor.species === 'whale' || actor.species === 'ancient' ? 6 : actor.species === 'shark' ? 16 : actor.species === 'nautilus' ? 2.5 : 5;
     let avoidance = previous?.avoidance || new THREE.Vector3(); let probeDelay = (previous?.probeDelay || 0) - delta;
     const smoothedAvoidance = previous?.smoothedAvoidance?.clone() || new THREE.Vector3();
     let tangentSign = previous?.tangentSign || 0;
-    if (!relocated && direction.lengthSq() > 0.0001) {
+    if (!relocated && direction.lengthSq() > 1e-10) {
       if (probeDelay <= 0) {
         const ahead = start.clone().addScaledVector(direction.clone().normalize(), Math.min(direction.length() + 8, body.extent * 0.7 + 8));
         avoidance = this.move(start, ahead, { hull: body.hull, ignore: actor.root }).sub(ahead); probeDelay = 0.15;
@@ -243,11 +275,31 @@ export class CollisionWorld {
         tangent.multiplyScalar(tangentSign);
         direction.addScaledVector(normal, Math.max(4, direction.length() * 0.8)).addScaledVector(tangent, 6);
       } else tangentSign = 0;
-      direction.clampLength(0, maxSpeed * delta);
+      direction.divideScalar(step).clampLength(0, maxSpeed);
     } else direction.set(0, 0, 0);
-    const corrected = this.move(start, start.clone().add(direction), { hull: body.hull, previousHull: relocated ? body.hull : previous.hull, ignore: actor.root });
+    if (!relocated) direction.add(this.anticipate(body, direction)).clampLength(0, maxSpeed);
+    const velocity = relocated ? new THREE.Vector3() : previous.velocity?.clone() || new THREE.Vector3();
+    const acceleration = ['whale', 'ancient', 'nautilus'].includes(actor.species) ? 2.5 : 9;
+    velocity.add(direction.sub(velocity).clampLength(0, acceleration * step));
+    const corrected = this.move(start, start.clone().addScaledVector(velocity, step), { hull: body.hull, previousHull: relocated ? body.hull : previous.hull, ignore: actor.root });
+    const displacement = corrected.clone().sub(start);
+    if (!relocated && actor.species !== 'dolphin' && displacement.x ** 2 + displacement.z ** 2 > 0.000001) {
+      const heading = Math.atan2(-displacement.x, -displacement.z);
+      const difference = Math.atan2(Math.sin(heading - shape.rotation.y), Math.cos(heading - shape.rotation.y));
+      const turnRate = ['whale', 'ancient'].includes(actor.species) ? 0.5 : 1.6;
+      shape.rotation.y += THREE.MathUtils.clamp(difference * (1 - Math.exp(-step * 4)), -turnRate * step, turnRate * step);
+      const pitch = THREE.MathUtils.clamp(Math.atan2(displacement.y, Math.hypot(displacement.x, displacement.z)), -0.16, 0.16);
+      shape.rotation.x = THREE.MathUtils.damp(shape.rotation.x, pitch, 2, step);
+      shape.rotation.z = THREE.MathUtils.damp(shape.rotation.z, THREE.MathUtils.clamp(-difference * 0.09, -0.12, 0.12), 2, step);
+      const hull = actorHull(actor);
+      corrected.copy(this.move(corrected, corrected, { hull, previousHull: body.hull, ignore: actor.root }));
+      body.hull = hull;
+    }
+    velocity.copy(corrected).sub(start).divideScalar(step).clampLength(0, maxSpeed);
     actor.root.parent.updateWorldMatrix(true, false); actor.root.position.copy(actor.root.parent.worldToLocal(corrected.clone().sub(offset)));
-    body.position.copy(corrected); this.previous.set(actor.root, { position: corrected.clone(), desired, hull: body.hull, avoidance, smoothedAvoidance, tangentSign, probeDelay });
+    body.position.copy(corrected); body.velocity = velocity;
+    if (actor.entry) actor.entry.velocity.copy(velocity);
+    this.previous.set(actor.root, { position: corrected.clone(), desired, hull: body.hull, velocity, rotation: shape.rotation.clone(), avoidance, smoothedAvoidance, tangentSign, probeDelay });
     return corrected;
   }
 

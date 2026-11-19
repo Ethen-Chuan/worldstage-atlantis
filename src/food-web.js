@@ -6,11 +6,11 @@ export class FoodWeb {
   update(delta, predators, prey, protectedActor, camera, collisions = null) {
     if (!(delta > 0)) return;
     const step = Math.min(delta, 0.1); this.clock += step;
-    const reserved = new Set();
+    const reserved = new Set(); const huntingGroups = new Set();
     for (const [index, predator] of predators.entries()) {
       if (!predator.root.visible || protectedActor?.root === predator.root) continue;
       let state = this.predators.get(predator.root);
-      if (!state) { state = { position: predator.root.position.clone(), heading: predator.root.rotation.y, hunger: 0.62 + index * 0.08, target: null, pursuit: 0, rest: index * 4, mode: '巡游' }; this.predators.set(predator.root, state); }
+      if (!state) { state = { position: predator.root.position.clone(), heading: predator.root.rotation.y, hunger: 0.62 + index * 0.04, target: null, pursuit: 0, rest: index * 17, mode: '巡游' }; this.predators.set(predator.root, state); }
       if (state.position.distanceToSquared(predator.root.position) > 90000) { state.position.copy(predator.root.position); state.target = null; }
       state.hunger = Math.min(1, state.hunger + step * 0.004); state.rest = Math.max(0, state.rest - step);
       const edible = fish => fish.alive !== false && fish.position && !(protectedActor?.source === fish.mesh && protectedActor.instance === fish.index) && !(protectedActor?.root === fish.mesh) && !reserved.has(fish);
@@ -18,7 +18,7 @@ export class FoodWeb {
       if (!state.target && state.hunger > 0.66 && state.rest === 0) {
         let nearest = 95;
         for (const fish of prey) {
-          if (!edible(fish)) continue;
+          if (!edible(fish) || huntingGroups.has(fish.group)) continue;
           const distance = state.position.distanceTo(fish.position);
           if (distance < nearest) { nearest = distance; state.target = fish; }
         }
@@ -39,7 +39,7 @@ export class FoodWeb {
       predator.root.rotation.y = state.heading;
       state.mode = state.target ? '追捕' : state.rest > 0 ? state.restMode || '巡游间歇' : '巡游';
       if (state.target) {
-        reserved.add(state.target); state.pursuit += step;
+        reserved.add(state.target); huntingGroups.add(state.target.group); state.pursuit += step;
         const reachable = distance < 8.5 && (!collisions || collisions.move(origin, state.target.position, { radius: Math.max(0.3, state.target.size || 0.3), ignore: predator.root, dynamic: false }).distanceToSquared(state.target.position) < 0.01);
         if (reachable) {
           state.target.alive = false; state.target.consumedAt = this.clock;
