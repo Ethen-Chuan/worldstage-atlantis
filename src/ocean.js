@@ -393,7 +393,7 @@ export class Ocean {
     for (const entry of this.creationScene.objects.values()) entry.root.visible = entry.item.following || entry.followPosition.distanceTo(arrived) < 900;
     this.currentBiome = this.endless.update(this.worldPosition(), this.worldOffset, this.time);
     this.currentLandmark = localLandmark(arrived.toArray());
-    this.palace.update(arrived, this.worldOffset);
+    this.palace.update(arrived, this.worldOffset, delta, this.camera);
     this.surface.update(arrived, this.worldOffset, this.time, this.reduced);
     this.landmarks.update(arrived, this.worldOffset, this.time, delta);
     this.wonders.collisions = this.collisions;

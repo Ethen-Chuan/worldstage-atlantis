@@ -52,7 +52,15 @@ export class Embodiment {
     if (authored) candidate = { root: authored.root, shape: authored.shape, living: LIVING_ASSETS.includes(authored.item.asset), species: authored.item.asset, name: authored.item.name, id: authored.item.id, point };
     else if (creature) candidate = { root: creature, shape: creature, living: true, species: creature.userData.creature, name: creature.userData.displayName || ASSETS[creature.userData.creature] || '海洋生物', point };
     else if (hit.object.isInstancedMesh && hit.object.userData.creature) candidate = { root: hit.object, species: hit.object.userData.creature, living: true, name: '一尾游鱼', instance: hit.instanceId, point };
-    else candidate = { root: hit.object, living: false, name: hit.object.name === 'ground' ? '这片海床' : hit.object.name || '眼前的遗迹与珊瑚', point, palaceDestination: hit.object.userData.palaceDestination };
+    else {
+      const instanceName = hit.object.userData.instanceNames?.[hit.instanceId];
+      candidate = { root: hit.object, living: false, name: instanceName || (hit.object.name === 'ground' ? '这片海床' : hit.object.name || '眼前的遗迹与珊瑚'), point, palaceDestination: hit.object.userData.palaceDestination };
+      if (instanceName) {
+        const matrix = new THREE.Matrix4(); hit.object.getMatrixAt(hit.instanceId, matrix); matrix.premultiply(hit.object.matrixWorld);
+        const bounds = hit.object.geometry.boundingBox.clone().applyMatrix4(matrix);
+        candidate.focusRadius = THREE.MathUtils.clamp(bounds.getSize(new THREE.Vector3()).length() * 0.52, 3, 70);
+      }
+    }
     if (hit.object.isInstancedMesh && creature === hit.object) { candidate.instance = hit.instanceId; candidate.point = point; }
     this.candidate = candidate;
     return candidate;
@@ -78,7 +86,7 @@ export class Embodiment {
     target.originalVisible = target.root.visible;
     target.root.updateWorldMatrix(true, true);
     const bounds = new THREE.Box3().setFromObject(target.root); const size = bounds.getSize(new THREE.Vector3());
-    this.radius = target.living ? THREE.MathUtils.clamp(size.length() * 0.52, 4, 65) : THREE.MathUtils.clamp(size.length() * 0.1, 14, 70);
+    this.radius = target.living ? THREE.MathUtils.clamp(size.length() * 0.52, 4, 65) : target.focusRadius ?? THREE.MathUtils.clamp(size.length() * 0.1, 14, 70);
     this.position = target.living ? target.root.getWorldPosition(new THREE.Vector3()).add(this.ocean.worldOffset) : target.point.clone();
     this.heading = target.shape?.rotation.y || 0;
     this.steeringHeading = this.heading;

@@ -67,7 +67,7 @@ document.querySelector('#app').innerHTML = `
   </main>`;
 
 const elements = Object.fromEntries([...document.querySelectorAll('[id]')].map(element => [element.id, element]));
-document.querySelector('.edition small').textContent = '0.10.1 · GRC';
+document.querySelector('.edition small').textContent = '0.11.0 · 宫城精修';
 let state = initialCreation();
 let journeyState = initialState();
 let ocean;
@@ -572,6 +572,7 @@ palacePanel.querySelectorAll('[data-room]').forEach(button => button.addEventLis
 function updatePlayUI() {
   const landmark = ocean.currentLandmark; const site = ocean.surface.blend < 0.5 && SITE_PLAY[landmark?.id] ? landmark : null; const play = ocean.play.inspect();
   palacePanel.hidden = landmark?.id !== 'crown' || Boolean(ocean.embodiment.active);
+  document.body.classList.toggle('in-palace', Boolean(ocean.palace.activeRoom) && !ocean.embodiment.active);
   palacePanel.querySelector('#palace-current').textContent = ocean.palace.activeRoom?.name || '五间房室 · 可进入';
   for (const button of palacePanel.querySelectorAll('[data-room]')) button.setAttribute('aria-current', String(button.dataset.room === ocean.palace.activeRoom?.id));
   document.body.classList.toggle('trial-complete', Boolean(play.trial?.finished));
