@@ -84,7 +84,7 @@ export class Ocean {
     this.scene.fog = new THREE.FogExp2('#244e50', 0.0024);
     this.camera = new THREE.PerspectiveCamera(46, 1, 0.4, 1500);
     this.camera.position.fromArray(PLACES.threshold.position);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(this.quality === 'balanced' ? 1 : Math.min(Math.max(devicePixelRatio, 1.25), 1.75));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;

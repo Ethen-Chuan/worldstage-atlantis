@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { seaHeight } from './terrain.js';
 
-const CELL_SIZE = 40;
+const CELL_SIZE = 20;
 const SKIN = 0.035;
 const PROFILES = {
   whale: [[0, 0, -13, 2.9], [0, 0, -9, 4], [0, 0, -4, 4.3], [0, 0, 1, 4], [0, 0, 6, 3.2], [0, 0, 10, 2.7], [0, 0, 14, 2.5], [0, 0, 18, 3], [-6, -3, -2, 3.5], [6, -3, -2, 3.5], [-10, -5, 1, 3.4], [10, -5, 1, 3.4], [-4, 0, 19, 3.7], [4, 0, 19, 3.7]],
@@ -20,17 +20,25 @@ function belongsTo(object, root) {
   return false;
 }
 
-export function separateSphere(point, radius, box) {
-  const difference = point.clone().sub(point.clone().clamp(box.min, box.max));
-  const distance = difference.length();
-  if (distance >= radius) return new THREE.Vector3();
-  if (distance > 0.00001) return difference.multiplyScalar((radius - distance + SKIN) / distance);
-  const faces = [
-    [point.x - box.min.x, new THREE.Vector3(-1, 0, 0)], [box.max.x - point.x, new THREE.Vector3(1, 0, 0)],
-    [point.y - box.min.y, new THREE.Vector3(0, -1, 0)], [box.max.y - point.y, new THREE.Vector3(0, 1, 0)],
-    [point.z - box.min.z, new THREE.Vector3(0, 0, -1)], [box.max.z - point.z, new THREE.Vector3(0, 0, 1)],
-  ].sort((first, second) => first[0] - second[0]);
-  return faces[0][1].multiplyScalar(faces[0][0] + radius + SKIN);
+function boxDistanceSquared(point, box) {
+  const horizontal = Math.max(box.min.x - point.x, 0, point.x - box.max.x);
+  const vertical = Math.max(box.min.y - point.y, 0, point.y - box.max.y);
+  const depth = Math.max(box.min.z - point.z, 0, point.z - box.max.z);
+  return horizontal * horizontal + vertical * vertical + depth * depth;
+}
+
+export function separateSphere(point, radius, box, target = new THREE.Vector3()) {
+  target.set(point.x - Math.max(box.min.x, Math.min(box.max.x, point.x)), point.y - Math.max(box.min.y, Math.min(box.max.y, point.y)), point.z - Math.max(box.min.z, Math.min(box.max.z, point.z)));
+  const squared = target.lengthSq();
+  if (squared >= radius * radius) return target.set(0, 0, 0);
+  if (squared > 0.0000000001) { const distance = Math.sqrt(squared); return target.multiplyScalar((radius - distance + SKIN) / distance); }
+  let nearest = point.x - box.min.x; let axis = 'x'; let sign = -1;
+  for (const component of ['x', 'y', 'z']) {
+    const lower = point[component] - box.min[component]; const upper = box.max[component] - point[component];
+    if (lower < nearest) { nearest = lower; axis = component; sign = -1; }
+    if (upper < nearest) { nearest = upper; axis = component; sign = 1; }
+  }
+  target.set(0, 0, 0); target[axis] = sign * (nearest + radius + SKIN); return target;
 }
 
 export function actorHull(actor) {
@@ -68,6 +76,7 @@ export class CollisionWorld {
   constructor({ floor = seaHeight } = {}) {
     this.floor = floor; this.cells = new Map(); this.sources = new Map(); this.entries = [];
     this.previous = new WeakMap(); this.bodies = new Map(); this.contacts = 0; this.dynamicContacts = 0; this.rebuilds = 0;
+    this.queryId = 0; this.moveCandidates = []; this.penetrationCandidates = []; this.penetrationCenter = new THREE.Vector3();
   }
 
   rebuild(roots, offset = new THREE.Vector3()) {
@@ -98,15 +107,28 @@ export class CollisionWorld {
 
   eachCell(box, visit) {
     for (let horizontal = Math.floor(box.min.x / CELL_SIZE); horizontal <= Math.floor(box.max.x / CELL_SIZE); horizontal++) {
-      for (let depth = Math.floor(box.min.z / CELL_SIZE); depth <= Math.floor(box.max.z / CELL_SIZE); depth++) visit(`${horizontal}:${depth}`);
+      for (let vertical = Math.floor(box.min.y / CELL_SIZE); vertical <= Math.floor(box.max.y / CELL_SIZE); vertical++) {
+        for (let depth = Math.floor(box.min.z / CELL_SIZE); depth <= Math.floor(box.max.z / CELL_SIZE); depth++) visit(`${horizontal}:${vertical}:${depth}`);
+      }
     }
   }
 
-  candidates(center, radius) {
-    const entries = new Set();
-    this.eachCell(new THREE.Box3(center.clone().addScalar(-radius), center.clone().addScalar(radius)), key => {
-      for (const entry of this.cells.get(key) || []) entries.add(entry);
-    });
+  candidates(center, radius, entries = []) {
+    entries.length = 0; const query = ++this.queryId;
+    const maxHorizontal = Math.floor((center.x + radius) / CELL_SIZE); const maxVertical = Math.floor((center.y + radius) / CELL_SIZE); const maxDepth = Math.floor((center.z + radius) / CELL_SIZE);
+    for (let horizontal = Math.floor((center.x - radius) / CELL_SIZE); horizontal <= maxHorizontal; horizontal++) {
+      for (let vertical = Math.floor((center.y - radius) / CELL_SIZE); vertical <= maxVertical; vertical++) {
+        for (let depth = Math.floor((center.z - radius) / CELL_SIZE); depth <= maxDepth; depth++) {
+          const bucket = this.cells.get(`${horizontal}:${vertical}:${depth}`);
+          if (!bucket) continue;
+          for (const entry of bucket) {
+            if (entry.query === query) continue;
+            entry.query = query;
+            if (boxDistanceSquared(center, entry.box) < radius * radius) entries.push(entry);
+          }
+        }
+      }
+    }
     return entries;
   }
 
@@ -115,8 +137,10 @@ export class CollisionWorld {
     for (const actor of actors) {
       if (!visible(actor.root) && active?.root !== actor.root) continue;
       const hull = actor.root === active?.root && active.hull ? active.hull : actorHull(actor);
-      const position = actor.root === active?.root && active.position ? active.position.clone() : actor.root.getWorldPosition(new THREE.Vector3()).add(offset);
-      this.bodies.set(actor.root, { actor, hull, position, extent: Math.max(...hull.map(probe => probe.offset.length() + probe.radius)) });
+      const desired = actor.root === active?.root && active.position ? active.position.clone() : actor.root.getWorldPosition(new THREE.Vector3()).add(offset);
+      const previous = this.previous.get(actor.root);
+      const position = previous && actor.root !== active?.root && !actor.kinematic && previous.desired.distanceToSquared(desired) <= 25600 ? previous.position.clone() : desired.clone();
+      this.bodies.set(actor.root, { actor, hull, position, desired, extent: Math.max(...hull.map(probe => probe.offset.length() + probe.radius)) });
     }
   }
 
@@ -128,26 +152,29 @@ export class CollisionWorld {
     const requestedSteps = Math.max(1, Math.ceil((displacement.length() + rotationTravel) / stride));
     if (requestedSteps > 1024) return result;
     displacement.divideScalar(requestedSteps);
+    const before = new THREE.Vector3(); const center = new THREE.Vector3(); const correction = new THREE.Vector3();
+    const probes = hull.map(probe => ({ radius: probe.radius, offset: new THREE.Vector3() }));
     for (let step = 1; step <= requestedSteps; step++) {
-      const before = result.clone(); result.add(displacement);
-      const probes = hull.map((probe, index) => ({ radius: probe.radius, offset: (previousHull[index]?.offset || probe.offset).clone().lerp(probe.offset, step / requestedSteps) }));
+      before.copy(result); result.add(displacement);
+      for (let index = 0; index < hull.length; index++) probes[index].offset.lerpVectors(previousHull[index]?.offset || hull[index].offset, hull[index].offset, step / requestedSteps);
       for (let pass = 0; pass < 6; pass++) {
         let touched = false;
         for (const probe of probes) {
-          const center = result.clone().add(probe.offset);
-          for (const entry of this.candidates(center, probe.radius)) {
+          center.copy(result).add(probe.offset);
+          for (const entry of this.candidates(center, probe.radius, this.moveCandidates)) {
             if (ignore && belongsTo(entry.source, ignore)) continue;
-            const correction = separateSphere(center, probe.radius, entry.box);
+            separateSphere(center, probe.radius, entry.box, correction);
             if (correction.lengthSq()) { result.add(correction); center.add(correction); touched = true; this.contacts++; }
           }
           if (dynamic) for (const [root, body] of this.bodies) {
             if (root === ignore || result.distanceToSquared(body.position) > (body.extent + probe.offset.length() + probe.radius) ** 2) continue;
             for (const other of body.hull) {
-              const difference = center.clone().sub(body.position).sub(other.offset); const distance = difference.length();
+              correction.copy(center).sub(body.position).sub(other.offset); const squared = correction.lengthSq();
               const clearance = probe.radius + other.radius + 0.25;
-              if (distance >= clearance) continue;
-              if (distance < 0.00001) difference.set(1, 0, 0); else difference.divideScalar(distance);
-              difference.multiplyScalar(clearance - distance + SKIN); result.add(difference); center.add(difference); touched = true; this.dynamicContacts++;
+              if (squared >= clearance * clearance) continue;
+              const distance = Math.sqrt(squared);
+              if (distance < 0.00001) correction.set(1, 0, 0); else correction.divideScalar(distance);
+              correction.multiplyScalar(clearance - distance + SKIN); result.add(correction); center.add(correction); touched = true; this.dynamicContacts++;
             }
           }
           const floor = this.floor(center.x, center.z) + probe.radius + SKIN;
@@ -163,8 +190,8 @@ export class CollisionWorld {
   penetration(position, hull, ignore = null) {
     let depth = 0;
     for (const probe of hull) {
-      const center = position.clone().add(probe.offset);
-      for (const entry of this.candidates(center, probe.radius)) if (!ignore || !belongsTo(entry.source, ignore)) depth = Math.max(depth, probe.radius - entry.box.distanceToPoint(center));
+      const center = this.penetrationCenter.copy(position).add(probe.offset);
+      for (const entry of this.candidates(center, probe.radius, this.penetrationCandidates)) if (!ignore || !belongsTo(entry.source, ignore)) depth = Math.max(depth, probe.radius - Math.sqrt(boxDistanceSquared(center, entry.box)));
       depth = Math.max(depth, this.floor(center.x, center.z) + probe.radius - center.y);
     }
     return depth;
@@ -175,11 +202,15 @@ export class CollisionWorld {
     for (let pass = 0; pass < 2; pass++) for (const body of this.bodies.values()) {
       if (result.distanceToSquared(body.position) > (body.extent + radius + 1) ** 2) continue;
       for (const probe of body.hull) {
-        const difference = result.clone().sub(body.position).sub(probe.offset); const distance = difference.length();
+        let horizontal = result.x - body.position.x - probe.offset.x; let vertical = result.y - body.position.y - probe.offset.y; let depth = result.z - body.position.z - probe.offset.z;
+        const squared = horizontal * horizontal + vertical * vertical + depth * depth;
         const clearance = probe.radius + radius + 0.6;
-        if (distance >= clearance) continue;
-        if (distance < 0.00001) difference.set(0, 1, 0); else difference.divideScalar(distance);
-        result.addScaledVector(difference, clearance - distance);
+        if (squared >= clearance * clearance) continue;
+        const distance = Math.sqrt(squared);
+        if (distance < 0.00001) { horizontal = 0; vertical = 1; depth = 0; }
+        else { horizontal /= distance; vertical /= distance; depth /= distance; }
+        const separation = clearance - distance;
+        result.x += horizontal * separation; result.y += vertical * separation; result.z += depth * separation;
       }
     }
     return result;
@@ -188,7 +219,7 @@ export class CollisionWorld {
   natural(actor, offset, delta) {
     const body = this.bodies.get(actor.root);
     if (!body || !(delta > 0)) return null;
-    const desired = body.position.clone(); const previous = this.previous.get(actor.root);
+    const desired = body.desired.clone(); const previous = this.previous.get(actor.root);
     const relocated = !previous || previous.desired.distanceTo(desired) > 160;
     let start = relocated ? desired.clone() : previous.position.clone();
     if (relocated) {
@@ -196,11 +227,14 @@ export class CollisionWorld {
     }
     const direction = desired.clone().sub(start);
     const maxSpeed = actor.species === 'whale' ? 22 : actor.species === 'shark' ? 18 : 11;
+    let avoidance = previous?.avoidance || new THREE.Vector3(); let probeDelay = (previous?.probeDelay || 0) - delta;
     if (!relocated && direction.lengthSq() > 0.0001) {
-      const ahead = start.clone().addScaledVector(direction.clone().normalize(), Math.min(direction.length() + 8, body.extent * 0.7 + 8));
-      const avoidance = this.move(start, ahead, { hull: body.hull, ignore: actor.root }).sub(ahead);
+      if (probeDelay <= 0) {
+        const ahead = start.clone().addScaledVector(direction.clone().normalize(), Math.min(direction.length() + 8, body.extent * 0.7 + 8));
+        avoidance = this.move(start, ahead, { hull: body.hull, ignore: actor.root }).sub(ahead); probeDelay = 0.15;
+      }
       if (avoidance.lengthSq() > 0.05) {
-        const normal = avoidance.normalize(); const tangent = new THREE.Vector3(-normal.z, 0, normal.x);
+        const normal = avoidance.clone().normalize(); const tangent = new THREE.Vector3(-normal.z, 0, normal.x);
         if (tangent.dot(direction) < 0) tangent.negate();
         direction.addScaledVector(normal, Math.max(4, direction.length() * 0.8)).addScaledVector(tangent, 6);
       }
@@ -208,7 +242,7 @@ export class CollisionWorld {
     } else direction.set(0, 0, 0);
     const corrected = this.move(start, start.clone().add(direction), { hull: body.hull, previousHull: relocated ? body.hull : previous.hull, ignore: actor.root });
     actor.root.parent.updateWorldMatrix(true, false); actor.root.position.copy(actor.root.parent.worldToLocal(corrected.clone().sub(offset)));
-    body.position.copy(corrected); this.previous.set(actor.root, { position: corrected.clone(), desired, hull: body.hull });
+    body.position.copy(corrected); this.previous.set(actor.root, { position: corrected.clone(), desired, hull: body.hull, avoidance, probeDelay });
     return corrected;
   }
 

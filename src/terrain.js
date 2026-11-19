@@ -14,14 +14,16 @@ function naturalHeight(horizontal, depth) {
   const ridges = Math.sin(horizontal * 0.016) * Math.cos(depth * 0.015) * 3;
   return -8 + outside * (dunes + ridges) + Math.sin(horizontal * 0.035 + depth * 0.016) * 1.2 + Math.sin(depth * 0.12 + horizontal * 0.05) * 0.35;
 }
+const levelSites = LANDMARKS.filter(landmark => landmark.kind !== 'city').map(landmark => ({ center: landmark.center, height: naturalHeight(landmark.center[0], landmark.center[2]) }));
 export function seaHeight(horizontal, depth) {
   let elevation = naturalHeight(horizontal, depth);
-  for (const landmark of LANDMARKS) {
-    if (landmark.kind === 'city') continue;
-    const distance = Math.hypot(horizontal - landmark.center[0], depth - landmark.center[2]);
-    if (distance > 125) continue;
+  for (const landmark of levelSites) {
+    const offsetX = horizontal - landmark.center[0]; const offsetZ = depth - landmark.center[2];
+    const squared = offsetX * offsetX + offsetZ * offsetZ;
+    if (squared > 15625) continue;
+    const distance = Math.sqrt(squared);
     const influence = 1 - smooth((distance - 65) / 60);
-    elevation += (naturalHeight(landmark.center[0], landmark.center[2]) - elevation) * influence;
+    elevation += (landmark.height - elevation) * influence;
   }
   return elevation;
 }

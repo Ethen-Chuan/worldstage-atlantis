@@ -87,3 +87,60 @@ test('paused natural actors do not move and overlapping initial spawns recover a
   world.natural(actor, new THREE.Vector3(), 1 / 60);
   assert.ok(world.penetration(root.position, actorHull(actor)) < 0.05);
 });
+
+test('three-dimensional broadphase filters other heights, deduplicates cells and preserves earlier queries', () => {
+  const { world } = fixture([
+    { min: [-25, -2, -25], max: [25, 2, 25] },
+    { min: [-25, 80, -25], max: [25, 84, 25] },
+    { min: [-45, -42, -45], max: [-35, -38, -35] },
+  ]);
+  const low = world.candidates(new THREE.Vector3(0, 0, 0), 30);
+  assert.equal(low.length, 1);
+  assert.equal(world.candidates(new THREE.Vector3(0, 82, 0), 3).length, 1);
+  assert.equal(low[0].box.min.y, -2);
+  assert.equal(world.candidates(new THREE.Vector3(-40, -40, -40), 2).length, 1);
+  assert.equal(world.candidates(new THREE.Vector3(0, 40, 0), 2).length, 0);
+});
+
+test('dynamic bodies use resolved positions instead of snapping back to their scripted path', () => {
+  const { world } = fixture([]); const scene = new THREE.Group(); const root = new THREE.Group(); scene.add(root);
+  const actor = { root, species: 'mermaid' }; root.position.set(0, 10, 0);
+  world.remember(actor, new THREE.Vector3(5, 12, 0));
+  world.beginBodies([actor], new THREE.Vector3());
+  assert.deepEqual(world.bodies.get(root).position.toArray(), [5, 12, 0]);
+  assert.deepEqual(world.bodies.get(root).desired.toArray(), [0, 10, 0]);
+  world.beginBodies([actor], new THREE.Vector3(), { root, position: new THREE.Vector3(9, 14, 0) });
+  assert.deepEqual(world.bodies.get(root).position.toArray(), [9, 14, 0]);
+  root.position.x = 300; world.beginBodies([actor], new THREE.Vector3());
+  assert.equal(world.bodies.get(root).position.x, 300);
+});
+
+test('reused query buffers do not let a corrected creature cross a corner on subsequent moves', () => {
+  const { world } = fixture([{ min: [-1, -10, -40], max: [1, 40, 40] }, { min: [-40, -10, -1], max: [40, 40, 1] }]);
+  let position = new THREE.Vector3(-10, 10, -10);
+  for (let frame = 0; frame < 180; frame++) {
+    position = world.move(position, position.clone().add(new THREE.Vector3(0.6, 0, 0.6)), { radius: 2 });
+    assert.ok(world.penetration(position, [{ offset: new THREE.Vector3(), radius: 2 }]) < 0.05);
+  }
+  assert.ok(position.x <= -3 && position.z <= -3);
+});
+
+test('cached steering still checks newly introduced obstacles on every movement step', () => {
+  const { world, root: wall } = fixture([]); const scene = new THREE.Group(); const root = new THREE.Group(); scene.add(root);
+  const actor = { root, species: 'mermaid' }; const offset = new THREE.Vector3();
+  root.position.set(-8, 10, 0); world.beginBodies([actor], offset); world.natural(actor, offset, 1 / 60);
+  root.position.set(-1, 10, 0); world.beginBodies([actor], offset); world.natural(actor, offset, 1 / 60);
+  const previous = world.previous.get(root);
+  assert.ok(previous.probeDelay > 0); assert.ok(previous.avoidance.lengthSq() < 1e-12);
+  const wallPosition = previous.position.x + 4;
+  wall.userData.collisionBoxes = [{ min: [wallPosition, -100, -30], max: [wallPosition + 0.1, 100, 30] }];
+  world.rebuild([wall]);
+  for (let frame = 0; frame < 240; frame++) {
+    root.position.set(8, 10, 0); world.beginBodies([actor], offset);
+    const corrected = world.natural(actor, offset, 1 / 60);
+    assert.ok(corrected.toArray().every(Number.isFinite));
+    assert.ok(world.penetration(corrected, actorHull(actor)) < 0.05);
+    assert.ok(corrected.x < wallPosition);
+  }
+  assert.ok(world.contacts > 0);
+});

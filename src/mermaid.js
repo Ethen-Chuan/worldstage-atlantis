@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createFlowDeformer } from './flow-deformation.js';
 
 function mergeStillMeshes(group, excluded = []) {
   const materials = new Map();
@@ -44,7 +45,7 @@ function ribbon(parent, material, points, width, seed, animated) {
   }
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3)); geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geometry.setIndex(indices); geometry.computeVertexNormals();
   const mesh = new THREE.Mesh(geometry, material); mesh.frustumCulled = false; parent.add(mesh);
-  animated.push({ mesh, base: new Float32Array(vertices), seed }); return mesh;
+  animated.push({ mesh, deform: createFlowDeformer(geometry, { seed }) }); return mesh;
 }
 
 export function createMermaid() {
@@ -134,7 +135,7 @@ export function createMermaid() {
   const curve=new THREE.CatmullRomCurve3([new THREE.Vector3(0,0.3,0),new THREE.Vector3(0,-0.8,0.12),new THREE.Vector3(0.1,-2,0.45),new THREE.Vector3(0.28,-3.2,0.94),new THREE.Vector3(0.35,-4.1,1.65)]);
   const tailGeometry=new THREE.TubeGeometry(curve,64,1,32,false);const tailVertices=tailGeometry.attributes.position;
   for(let index=0;index<tailVertices.count;index++){const progress=Math.floor(index/33)/64;const center=curve.getPointAt(progress);const radius=0.51*Math.pow(1-progress,0.9)+0.04;tailVertices.setXYZ(index,center.x+(tailVertices.getX(index)-center.x)*radius,center.y+(tailVertices.getY(index)-center.y)*radius,center.z+(tailVertices.getZ(index)-center.z)*radius);}
-  tailGeometry.computeVertexNormals();const tailMesh=new THREE.Mesh(tailGeometry,tailMaterial);tailMesh.name='mermaid-tail-body';tail.add(tailMesh);animated.push({mesh:tailMesh,base:new Float32Array(tailVertices.array),seed:0,tail:true});
+  tailGeometry.computeVertexNormals();const tailMesh=new THREE.Mesh(tailGeometry,tailMaterial);tailMesh.name='mermaid-tail-body';tail.add(tailMesh);animated.push({mesh:tailMesh,deform:createFlowDeformer(tailGeometry,{tail:true})});
   const attachment=curve.getPoint(1);const fins=new THREE.Group();fins.name='mermaid-tail-fins';fins.position.copy(attachment);tail.add(fins);
   for(const side of [-1,1])for(let layer=0;layer<4;layer++) {
     ribbon(fins,silk,[[0,0,0],[side*(0.7+layer*0.13),-0.45,0.12],[side*(1.55+layer*0.14),-1.1-layer*0.15,0.45],[side*(1.9+layer*0.22),-2-layer*0.26,0.7],[side*(1.2+layer*0.26),-2.8-layer*0.15,1.1]],0.43-layer*0.06,layer+side,animated);
@@ -149,7 +150,7 @@ export function createMermaid() {
     const blink=time%5.8;eyelids.forEach(lid=>lid.visible=blink>5.56&&blink<5.76);
     lowerLip.position.y=-0.185-(root.userData.singing?(0.5+Math.sin(time*7)*0.5)*0.023:0);
     arms.forEach(({shoulder,forearm,side})=>{shoulder.rotation.z=side*(0.38+Math.sin(time*0.53+side)*0.18);shoulder.rotation.x=-0.13+Math.sin(time*0.44+side)*0.18;forearm.rotation.x=-0.3+Math.sin(time*0.57+side)*0.2;forearm.rotation.z=side*0.16;});
-    for(const entry of animated){const vertices=entry.mesh.geometry.attributes.position;for(let index=0;index<vertices.count;index++){const horizontal=entry.base[index*3];const vertical=entry.base[index*3+1];const depth=entry.base[index*3+2];const weight=entry.tail?Math.max(0,-vertical)/4.2:entry.mesh.geometry.attributes.uv.getY(index);vertices.setXYZ(index,horizontal+Math.sin(time*0.9+weight*4+entry.seed)*weight*weight*(entry.tail?0.34:0.18),vertical,depth+Math.sin(time*0.65-weight*4+entry.seed)*weight*weight*(entry.tail?0.18:0.24));}vertices.needsUpdate=true;entry.mesh.geometry.computeVertexNormals();}
+    for(const entry of animated)entry.deform.update(time);
     const attachmentWeight=Math.max(0,-attachment.y)/4.2;
     fins.position.set(attachment.x+Math.sin(time*0.9+attachmentWeight*4)*attachmentWeight*attachmentWeight*0.34,attachment.y,attachment.z+Math.sin(time*0.65-attachmentWeight*4)*attachmentWeight*attachmentWeight*0.18);
     fins.rotation.z=Math.sin(time*0.9+4)*0.13;fins.rotation.x=Math.sin(time*0.65)*0.08;
