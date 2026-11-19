@@ -4,6 +4,7 @@ import { seaHeight } from './terrain.js';
 const CELL_SIZE = 20;
 const SKIN = 0.035;
 const PROFILES = {
+  dolphin: [[0, -0.15, -3.4, 0.6], [0, 0, -2.2, 0.85], [0, 0, -0.7, 0.95], [0, 0, 0.7, 0.75], [0, 0, 2, 0.5], [0, 0, 3.2, 0.45], [-1.2, -0.35, -0.7, 0.9], [1.2, -0.35, -0.7, 0.9], [-1.1, 0, 3.6, 0.75], [1.1, 0, 3.6, 0.75], [0, 1.1, -0.2, 0.65]],
   ancient: [[0, 0, -11, 3], [0, 0, -7, 4.5], [0, 0, -2, 4.4], [0, 0, 3, 3.7], [0, 0, 7, 2.7], [0, 0, 11, 1.8], [0, 0, 16, 2.4], [0, 4, 17, 3.2], [0, -4, 17, 3.2], [0, 7, 17, 2.5], [0, -7, 17, 2.5], [-7, -2.5, -2, 3.8], [7, -2.5, -2, 3.8], [-11, -3, -1, 3.2], [11, -3, -1, 3.2], [0, 6, 3, 3.4]],
   turtle: [[0, 0.15, -0.8, 2.1], [0, 0.15, 0.9, 2], [0, 0, -3, 0.8], [-3, 0, 0, 1.7], [3, 0, 0, 1.7], [-4.4, 0, 1.5, 1.8], [4.4, 0, 1.5, 1.8], [-2.5, 0, 3, 1.3], [2.5, 0, 3, 1.3]],
   nautilus: [[0, 0, 0, 1.7], [0, -0.5, -1.3, 0.9], [0, -0.9, -2.7, 1.4]],
@@ -249,6 +250,7 @@ export class CollisionWorld {
   natural(actor, offset, delta) {
     const body = this.bodies.get(actor.root);
     if (!body || !(delta > 0)) return null;
+    if (actor.motion === 'surface') return this.surfaceMotion(actor, body, offset, delta);
     const desired = body.desired.clone(); const previous = this.previous.get(actor.root);
     const relocated = !previous || previous.desired.distanceTo(desired) > 160;
     const step = Math.min(delta, 0.1);
@@ -301,6 +303,27 @@ export class CollisionWorld {
     if (actor.entry) actor.entry.velocity.copy(velocity);
     this.previous.set(actor.root, { position: corrected.clone(), desired, hull: body.hull, velocity, rotation: shape.rotation.clone(), avoidance, smoothedAvoidance, tangentSign, probeDelay });
     return corrected;
+  }
+
+  surfaceMotion(actor, body, offset, delta) {
+    const previous = this.previous.get(actor.root); const desired = body.desired.clone();
+    const relocated = !previous || previous.desired.distanceTo(desired) > 160;
+    const start = relocated ? desired.clone() : previous.position.clone();
+    const movement = relocated ? new THREE.Vector3() : desired.clone().sub(previous.desired);
+    if (!relocated) movement.addScaledVector(previous.desired.clone().sub(start), 1 - Math.exp(-delta * 1.2));
+    movement.clampLength(0, 32 * delta);
+    const position = this.move(start, start.clone().add(movement), { hull: body.hull, previousHull: previous?.hull || body.hull, ignore: actor.root });
+    const velocity = position.clone().sub(start).divideScalar(Math.max(0.00001, delta));
+    const shape = actor.shape || actor.root;
+    if (velocity.lengthSq() > 0.01) {
+      shape.rotation.set(Math.atan2(velocity.y, Math.hypot(velocity.x, velocity.z)), Math.atan2(-velocity.x, -velocity.z), shape.rotation.z, 'YXZ');
+      const hull = actorHull(actor);
+      position.copy(this.move(position, position, { hull, previousHull: body.hull, ignore: actor.root })); body.hull = hull;
+    }
+    actor.root.parent.updateWorldMatrix(true, false); actor.root.position.copy(actor.root.parent.worldToLocal(position.clone().sub(offset)));
+    body.position.copy(position); body.velocity = velocity;
+    this.previous.set(actor.root, { position: position.clone(), desired, hull: body.hull, velocity, rotation: shape.rotation.clone() });
+    return position;
   }
 
   remember(actor, position) {

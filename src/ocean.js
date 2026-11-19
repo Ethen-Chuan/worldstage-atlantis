@@ -672,7 +672,7 @@ export class Ocean {
     const active = this.embodiment.active;
     const actors = [...this.creationScene.objects.values()].filter(entry => LIVING_ASSETS.includes(entry.item.asset) && !['shoal', 'jelly'].includes(entry.item.asset)).map(entry => ({ root: entry.root, shape: entry.shape, species: entry.item.asset, entry }));
     for (const animal of this.ecology.animals) actors.push({ root: animal.root, shape: animal.root, species: animal.kind });
-    for (const animal of this.surface.animals) actors.push({ root: animal.root, shape: animal.root, species: 'dolphin' });
+    for (const animal of this.surface.animals) actors.push({ root: animal.root, shape: animal.root, species: 'dolphin', motion: 'surface' });
     actors.push({ root: this.ecology.ancient.root, shape: this.ecology.ancient.root, species: 'ancient' });
     for (const [species, animal] of Object.entries(this.creatures)) actors.push({ root: animal.root, shape: animal.root, species });
     for (const entry of [...this.landmarks.entries, ...this.wonders.entries.values()]) entry.root.traverseVisible(root => {
@@ -690,6 +690,7 @@ export class Ocean {
       if (safe && predator) predator.position.copy(actor.root.position);
     }
     this.embodiment.update(delta);
+    this.surface.afterSimulation(this.time, this.reduced);
     this.play.update(delta);
     this.whaleFall.update(delta);
     const beforeOrbit = this.worldPosition();

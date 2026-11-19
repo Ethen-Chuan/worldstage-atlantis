@@ -48,3 +48,12 @@ test('switching targets preserves the original free-exploration return view', ()
   assert.equal(embodiment.savedView, saved); assert.equal(embodiment.firstPerson, false); assert.equal(root.visible, true);
   embodiment.update(2); assert.equal(ocean.controls.autoRotate, true);
 });
+
+test('clicking an airborne dolphin does not freeze its leap during the first-person transition', () => {
+  const { ocean, root, embodiment } = fixture(); root.position.set(0, 197, 0); root.userData.surfaceVelocity = new THREE.Vector3(0, 9, -14);
+  embodiment.enter({ root, shape: root, living: true, species: 'dolphin', name: 'dolphin' });
+  const origin = embodiment.position.clone();
+  for (let frame = 0; frame < 30; frame++) { ocean.time += 1 / 60; embodiment.beforeSimulation(); embodiment.update(1 / 60); }
+  assert.equal(embodiment.firstPerson, true); assert.ok(embodiment.blend); assert.ok(embodiment.position.distanceTo(origin) > 5);
+  assert.ok(embodiment.dolphinPilot.airborne); assert.ok(embodiment.dolphinPilot.velocity.y < 9);
+});

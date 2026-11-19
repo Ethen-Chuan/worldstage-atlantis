@@ -3,6 +3,7 @@ import { ASSETS, LIVING_ASSETS } from './creation.js';
 import { seaHeight } from './terrain.js';
 import { dampAngle } from './swim.js';
 import { actorHull } from './collision-world.js';
+import { DolphinPilot } from './dolphin-motion.js';
 
 export { embodimentMarkup } from './world-interface.js';
 
@@ -92,6 +93,8 @@ export class Embodiment {
     this.collisionHull = target.living ? actorHull(target) : null;
     if (target.living && this.ocean.collisions) this.position.copy(this.ocean.collisions.move(this.position, this.position, { hull: this.collisionHull, ignore: target.root }));
     this.pitch = 0;
+    this.dolphinPilot = target.species === 'dolphin' ? new DolphinPilot(this.position, target.root.userData.surfaceVelocity) : null;
+    this.bodyPitch = target.shape?.rotation.x || 0;
     this.ocean.travelTarget = null; this.ocean.cruising = false; this.ocean.movement.clear(); this.ocean.navigationVelocity.set(0, 0, 0);
     const behind = new THREE.Vector3(0, this.radius * 0.38 + 3, this.radius * 1.85).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
     const destination = this.position.clone().add(behind); const lookTarget = this.position.clone();
@@ -166,6 +169,14 @@ export class Embodiment {
     if (this.blend) {
       const previousCamera = this.ocean.camera.position.clone().add(this.ocean.worldOffset);
       const blend = this.blend; blend.elapsed += delta;
+      if (this.dolphinPilot && target.living) {
+        const previous = this.position.clone();
+        const desired = this.dolphinPilot.step(this.position, this.heading, new Set(), delta, this.ocean.time);
+        this.position.copy(this.ocean.collisions ? this.ocean.collisions.move(previous, desired, { hull: actorHull(target), ignore: target.root }) : desired);
+        const displacement = this.position.clone().sub(previous); blend.destination.add(displacement); blend.target.add(displacement);
+        this.velocity.copy(this.dolphinPilot.velocity);
+        this.bodyPitch = THREE.MathUtils.damp(this.bodyPitch, Math.atan2(this.velocity.y, Math.hypot(this.velocity.x, this.velocity.z)), 7, delta);
+      }
       const progress = Math.min(1, blend.elapsed / blend.duration); const eased = progress * progress * (3 - 2 * progress);
       this.ocean.camera.position.lerpVectors(blend.origin, blend.destination, eased).sub(this.ocean.worldOffset);
       this.ocean.controls.target.lerpVectors(blend.look, blend.target, eased).sub(this.ocean.worldOffset);
@@ -173,6 +184,7 @@ export class Embodiment {
       if (target.living) {
         target.root.parent.updateWorldMatrix(true, false); target.root.position.copy(target.root.parent.worldToLocal(this.position.clone().sub(this.ocean.worldOffset))); target.root.visible = !this.firstPerson || progress < 0.78;
         target.shape.rotation.y = this.heading;
+        if (this.dolphinPilot) target.shape.rotation.x = this.bodyPitch;
         target.animate?.(this.ocean.time, delta);
       }
       if (progress === 1) { this.blend = null; this.ocean.controls.enabled = !this.firstPerson; this.ocean.controls.autoRotate = !target.living; }
@@ -187,19 +199,24 @@ export class Embodiment {
       if (Math.abs(difference) < 0.001) this.desiredHeading = null;
     }
     const desired = new THREE.Vector3(); const keys = this.ocean.movement;
-    const turnSpeed = target.species === 'whale' ? 0.65 : 1.2;
+    const turnSpeed = this.dolphinPilot?.airborne ? 0 : target.species === 'whale' ? 0.65 : 1.2;
     this.steeringHeading += ((keys.has('left') ? 1 : 0) - (keys.has('right') ? 1 : 0)) * turnSpeed * delta;
     const forward = new THREE.Vector3(-Math.sin(this.steeringHeading), 0, -Math.cos(this.steeringHeading));
     if (keys.has('forward')) desired.add(forward); if (keys.has('back')) desired.sub(forward);
     if (keys.has('up')) desired.y += 0.65; if (keys.has('down')) desired.y -= 0.65;
     const speed = target.species === 'whale' ? 25 : target.species === 'turtle' ? 17 : 32;
     if (desired.lengthSq() > 1) desired.normalize(); desired.multiplyScalar(speed * (keys.has('fast') ? 1.8 : 1));
-    this.velocity.lerp(desired, 1 - Math.exp(-delta * 3.5)); this.position.addScaledVector(this.velocity, delta);
+    if (this.dolphinPilot) {
+      this.position.copy(this.dolphinPilot.step(this.position, this.steeringHeading, keys, delta, this.ocean.time));
+      this.velocity.copy(this.dolphinPilot.velocity);
+      this.bodyPitch = THREE.MathUtils.damp(this.bodyPitch, Math.atan2(this.velocity.y, Math.hypot(this.velocity.x, this.velocity.z)), 7, delta);
+      target.shape.rotation.set(this.bodyPitch, this.heading, 0, 'YXZ');
+    } else { this.velocity.lerp(desired, 1 - Math.exp(-delta * 3.5)); this.position.addScaledVector(this.velocity, delta); }
     if (this.ocean.collisions) {
       target.shape.rotation.y = this.heading;
       const hull = actorHull(target);
       const safe = this.ocean.collisions.move(previous, this.position, { hull, previousHull: this.collisionHull || hull, ignore: target.root });
-      if (safe.distanceTo(this.position) > 0.05) this.velocity.multiplyScalar(0.35);
+      if (safe.distanceTo(this.position) > 0.05) { this.velocity.multiplyScalar(0.35); this.dolphinPilot?.velocity.copy(this.velocity); }
       this.position.copy(safe);
       this.collisionHull = hull;
       this.ocean.collisions.remember(target, safe);
@@ -218,7 +235,8 @@ export class Embodiment {
     }
     target.animate?.(this.ocean.time, delta);
     if (this.firstPerson) {
-      const direction = new THREE.Vector3(-Math.sin(this.heading) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.heading) * Math.cos(this.pitch));
+      const pitch = this.pitch + (this.dolphinPilot ? this.bodyPitch * 0.8 : 0);
+      const direction = new THREE.Vector3(-Math.sin(this.heading) * Math.cos(pitch), Math.sin(pitch), -Math.cos(this.heading) * Math.cos(pitch));
       this.ocean.camera.position.copy(local).addScaledVector(direction, this.radius * 0.55); this.ocean.camera.position.y += this.radius * 0.08;
       this.ocean.controls.target.copy(this.ocean.camera.position).add(direction); this.ocean.camera.lookAt(this.ocean.controls.target);
     } else {
@@ -263,5 +281,5 @@ export class Embodiment {
     this.blend = { elapsed: 0, origin: this.ocean.camera.position.clone().add(this.ocean.worldOffset), look: this.ocean.controls.target.clone().add(this.ocean.worldOffset), destination, target: this.position.clone(), duration: this.ocean.reduced ? 0.4 : 2.4 };
   }
 
-  inspect() { return this.active ? { name: this.active.name, living: this.active.living, species: this.active.species, firstPerson: this.firstPerson, heading: this.heading, pitch: this.pitch, transitioning: Boolean(this.blend), position: this.position.toArray() } : null; }
+  inspect() { return this.active ? { name: this.active.name, living: this.active.living, species: this.active.species, firstPerson: this.firstPerson, heading: this.heading, pitch: this.pitch, airborne: this.dolphinPilot?.airborne || false, transitioning: Boolean(this.blend), position: this.position.toArray() } : null; }
 }

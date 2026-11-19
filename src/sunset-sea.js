@@ -1,19 +1,11 @@
 import * as THREE from 'three';
 import { smoothBody, attachSwimming } from './swim.js';
+import { dolphinPath, SEA_LEVEL, waterCrossing } from './dolphin-motion.js';
+import { BreachEffects } from './breach-effects.js';
 
-export const SEA_LEVEL = 190;
-export function dolphinPath(time, index) {
-  const cycle = 24; const phase = ((time - index * 1.05) % cycle + cycle) % cycle;
-  const leap = THREE.MathUtils.clamp((phase - 5) / 3.5, 0, 1);
-  const arc = phase >= 5 && phase <= 8.5 ? Math.sin(leap * Math.PI) ** 2 : 0;
-  const verticalSpeed = phase > 5 && phase < 8.5 ? Math.sin(leap * Math.PI * 2) * Math.PI / 3.5 * 7 : 0;
-  const angle = phase / cycle * Math.PI * 2;
-  const lateralSpeed = Math.cos(angle) * 30 * Math.PI * 2 / cycle; const forwardSpeed = -Math.sin(angle) * 75 * Math.PI * 2 / cycle;
-  const landing = 5 + (1 - Math.asin(Math.sqrt(0.4)) / Math.PI) * 3.5;
-  return { position: [-66 + index * 17 + Math.sin(angle) * 30, SEA_LEVEL - 2.8 + arc * 7, -10 + Math.cos(angle) * 75 - index % 3 * 12], heading: Math.atan2(-lateralSpeed, -forwardSpeed), pitch: Math.atan2(verticalSpeed, Math.hypot(lateralSpeed, forwardSpeed)), splash: phase >= landing && phase < landing + 1.3 ? (phase - landing) / 1.3 : -1, phase };
-}
+export { dolphinPath, SEA_LEVEL } from './dolphin-motion.js';
 
-function createDolphin() {
+export function createDolphin() {
   const root = new THREE.Group(); root.userData.creature = 'dolphin'; root.userData.displayName = '追光海豚'; root.name = 'bottlenose-dolphin';
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.38 });
   const finMaterial = new THREE.MeshStandardMaterial({ color: '#6d8a91', roughness: 0.46, side: THREE.DoubleSide });
@@ -29,11 +21,17 @@ function createDolphin() {
     const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(outline, { depth: 0.045, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.04, bevelSegments: 2 }), finMaterial);
     mesh.position.set(...position); mesh.rotation.set(...rotation); mesh.scale.set(...scale); root.add(mesh); return mesh;
   };
-  fin([[0, 0], [0.5, 1.45], [0.7, 1.6], [0.6, 0.5], [1.5, 0]], [0, 0.68, -0.4], [0, -Math.PI / 2, 0]);
+  fin([[0, 0], [0.38, 0.6], [0.67, 0.95], [0.72, 0.9], [0.65, 0.38], [1.24, 0]], [0, 0.68, -0.4], [0, -Math.PI / 2, 0]);
   for (const side of [-1, 1]) fin([[0, 0], [1.6, -1.4], [1.5, -1.6], [0.2, -0.65]], [side * 0.5, -0.38, -1.5], [-Math.PI / 2, 0, 0], [side, 1, 1]);
   const tail = fin([[0, 0], [1.7, -0.8], [1.4, -1.2], [0, -0.7], [-1.4, -1.2], [-1.7, -0.8]], [0, 0, 2.9], [-Math.PI / 2, 0, 0]);
-  const swim = attachSwimming(root, { axis: 'y', start: -0.3, end: 3.2, amplitude: 0.2, frequency: 3, wavelength: 0.5 });
-  return { root, animate(time) { swim.update(time); tail.position.y = swim.sample(2.9, time).offset; } };
+  root.remove(tail);
+  const swim = attachSwimming(root, { axis: 'y', start: -0.3, end: 3.2, amplitude: 0.2, frequency: 7, wavelength: 0.75, dynamicAmplitude: true }); root.add(tail);
+  let effort = 0.55; let lastTime = null;
+  return { root, animate(time, strength = 0.55) {
+    const delta = lastTime == null ? 0 : Math.max(0, time - lastTime); lastTime = time;
+    effort = THREE.MathUtils.damp(effort, strength, 8, delta); swim.update(time, effort);
+    const wave = swim.sample(2.9, time, effort); tail.position.y = wave.offset; tail.rotation.x = -Math.PI / 2 + Math.atan(wave.slope);
+  } };
 }
 
 export class SunsetSea {
@@ -68,15 +66,14 @@ export class SunsetSea {
         gl_FragColor=vec4(color,opacity);
       }`,
     });
-    this.water = new THREE.Mesh(geometry, material); this.water.userData.noPick = true; this.water.userData.noAO = true; this.water.frustumCulled = false; this.root.add(this.water);
+    this.water = new THREE.Mesh(geometry, material); this.water.renderOrder = -20; this.water.userData.noPick = true; this.water.userData.noAO = true; this.water.frustumCulled = false; this.root.add(this.water);
+    this.effects = new BreachEffects(this.root);
   }
   prepare() {
     if (this.animals.length) return;
     for (let index = 0; index < 9; index++) {
       const animal = createDolphin(); animal.root.scale.setScalar(1.9); this.root.add(animal.root);
-      const splash = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 40), new THREE.MeshBasicMaterial({ color: '#ffe2a2', transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }));
-      splash.rotation.x = -Math.PI / 2; splash.userData.noPick = true; splash.userData.noAO = true; this.root.add(splash);
-      this.animals.push({ ...animal, index, splash, kind: 'dolphin' });
+      this.animals.push({ ...animal, index, kind: 'dolphin', motion: 'surface' });
     }
   }
   update(position, offset, time, reduced) {
@@ -87,12 +84,23 @@ export class SunsetSea {
     this.water.material.uniforms.worldOffset.value.copy(offset);
     if (position.y > SEA_LEVEL - 65) this.prepare();
     for (const animal of this.animals) {
-      const path = dolphinPath(time * (reduced ? 0.7 : 1), animal.index);
-      animal.root.position.fromArray(path.position); animal.root.rotation.set(path.pitch, path.heading, 0, 'YXZ'); animal.root.visible = position.distanceTo(animal.root.position) < 600;
-      animal.animate(time);
-      animal.splash.visible = path.splash >= 0 && path.splash < 1;
-      if (animal.splash.visible) { animal.splash.position.set(path.position[0], SEA_LEVEL + 0.5, path.position[2]); animal.splash.scale.setScalar(1 + path.splash * 6); animal.splash.material.opacity = (1 - path.splash) * 0.48; }
+      if (animal.previousTime === time && animal.previous) { animal.root.position.copy(animal.previous); animal.root.quaternion.copy(animal.previousRotation); continue; }
+      const path = dolphinPath(time, animal.index); animal.path = path;
+      animal.root.position.fromArray(path.position); animal.root.rotation.set(path.pitch, path.heading, path.bank, 'YXZ'); animal.root.visible = position.distanceTo(animal.root.position) < 600;
+      animal.root.userData.surfaceVelocity = new THREE.Vector3(...path.velocity);
     }
   }
-  inspect() { return { level: SEA_LEVEL, blend: this.blend, dolphins: this.animals.length }; }
+  afterSimulation(time, reduced) {
+    for (const animal of this.animals) {
+      const position = animal.root.position.clone();
+      animal.animate(time, position.y > SEA_LEVEL ? 0.07 : animal.path?.effort || 0.55);
+      if (animal.previous && time > animal.previousTime) {
+        const crossing = waterCrossing(animal.previous, position, animal.previousTime, time);
+        if (crossing && time - (animal.lastSplash ?? -100) > 0.65) { this.effects.emit(crossing); animal.lastSplash = time; }
+      }
+      animal.previous = position; animal.previousTime = time; animal.previousRotation = animal.root.quaternion.clone();
+    }
+    this.effects.update(time, reduced);
+  }
+  inspect() { return { level: SEA_LEVEL, blend: this.blend, dolphins: this.animals.length, splashes: this.effects.count, stages: this.animals.map(animal => animal.path?.stage), poses: this.animals.map(animal => ({ position: animal.root.position.toArray(), pitch: animal.root.rotation.x, heading: animal.root.rotation.y })) }; }
 }

@@ -13,14 +13,15 @@ export function swimWave(depth, time, settings) {
 
 export function attachSwimming(root, settings) {
   const time = { value: 0 };
+  const strength = { value: 1 };
   const axis = settings.axis === 'y' ? 'y' : 'x';
-  const declarations = `uniform float swimTime;
+  const declarations = `uniform float swimTime; ${settings.dynamicAmplitude ? 'uniform float swimStrength;' : ''}
     vec2 swimCurve(float depth) {
       float progress = clamp((depth - ${settings.start.toFixed(4)}) / ${(settings.end - settings.start).toFixed(4)}, 0.0, 1.0);
       float weight = progress * progress * (3.0 - 2.0 * progress);
       float gradient = 6.0 * progress * (1.0 - progress) / ${(settings.end - settings.start).toFixed(4)};
       float phase = swimTime * ${settings.frequency.toFixed(4)} - (depth - ${settings.start.toFixed(4)}) * ${settings.wavelength.toFixed(4)};
-      return vec2(sin(phase) * weight, cos(phase) * -${settings.wavelength.toFixed(4)} * weight + sin(phase) * gradient) * ${settings.amplitude.toFixed(4)};
+      return vec2(sin(phase) * weight, cos(phase) * -${settings.wavelength.toFixed(4)} * weight + sin(phase) * gradient) * ${settings.amplitude.toFixed(4)} ${settings.dynamicAmplitude ? '* swimStrength' : ''};
     }\n`;
   const materials = new Map();
   for (const object of root.children) {
@@ -31,6 +32,7 @@ export function attachSwimming(root, settings) {
       material.onBeforeCompile = shader => {
         compile(shader);
         shader.uniforms.swimTime = time;
+        if (settings.dynamicAmplitude) shader.uniforms.swimStrength = strength;
         shader.vertexShader = declarations + shader.vertexShader;
         shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>\nobjectNormal.z -= objectNormal.${axis} * swimCurve(position.z).y;`);
         shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\ntransformed.${axis} += swimCurve(position.z).x;`);
@@ -41,7 +43,7 @@ export function attachSwimming(root, settings) {
     object.material = materials.get(original);
   }
   root.traverse(object => { if (object.isMesh) object.userData.noAO = true; });
-  return { update(clock) { time.value = clock; }, sample(depth, clock) { return swimWave(depth, clock, settings); } };
+  return { update(clock, amplitude = 1) { time.value = clock; strength.value = amplitude; }, sample(depth, clock, amplitude = 1) { const wave = swimWave(depth, clock, settings); return { offset: wave.offset * amplitude, slope: wave.slope * amplitude }; } };
 }
 
 export function springPosition(position, velocity, target, frequency, delta) {

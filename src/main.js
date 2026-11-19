@@ -69,7 +69,7 @@ document.querySelector('#app').innerHTML = `
   </main>`;
 
 const elements = Object.fromEntries([...document.querySelectorAll('[id]')].map(element => [element.id, element]));
-document.querySelector('.edition small').textContent = '0.14.2 · 自动航路';
+document.querySelector('.edition small').textContent = '0.14.3 · 逐浪跃游';
 let state = initialCreation();
 let journeyState = initialState();
 let ocean;
@@ -621,7 +621,7 @@ function updateEmbodimentUI() {
   if (!active) { toggleEmbodiedChat(false); return; }
   elements['inhabit-mode'].textContent = active.living ? 'INHABIT THIS WORLD' : 'A DIFFERENT POINT OF VIEW';
   elements['inhabit-title'].textContent = active.name;
-  elements['inhabit-help'].textContent = active.living ? 'W/S 前后游 · A/D 转向 · Q/E 升降 · Shift 加速 · 拖动环顾' : '自动 360° 环绕 · 拖动接管 · 滚轮靠近';
+  elements['inhabit-help'].textContent = active.species === 'dolphin' ? 'W 加速 · S 减速 · A/D 转向 · Q 上浮，接近水面时加速跃出 · E 下潜 · 空中保持惯性，自动入水' : active.living ? 'W/S 前后游 · A/D 转向 · Q/E 升降 · Shift 加速 · 拖动环顾' : '自动 360° 环绕 · 拖动接管 · 滚轮靠近';
   elements['inhabit-view'].textContent = active.living ? ocean.embodiment.firstPerson ? '切换第三人称' : '切换第一人称' : ocean.controls.autoRotate ? '暂停环绕' : '继续环绕';
 }
 function endEmbodiment() { if (ocean?.embodiment.active) wakeWorld(); if (ocean?.play.trial) ocean.play.stop(); else ocean?.embodiment.exit(); updateEmbodimentUI(); elements['home-button'].focus(); }
