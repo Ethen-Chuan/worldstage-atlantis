@@ -127,8 +127,11 @@ export function createWhale() {
   const colors = [];
   const upperColor = new THREE.Color('#334441');
   const lowerColor = new THREE.Color('#c4c8ae');
-  const body = smoothBody([[-15.4, 0.12], [-15, 1.35], [-13.8, 2.18], [-11, 2.85], [-7, 3.4], [-2, 3.55], [3, 2.9], [8, 1.9], [12, 1.04], [16, 0.46], [18, 0.16]], 128, 64, 0.79);
+  const body = smoothBody([[-15.4, 0.25], [-15.15, 1.3], [-14.3, 2.2], [-12, 2.85], [-8, 3.45], [-3, 3.65], [2, 3.05], [7, 2.15], [12, 1.1], [16, 0.43], [18, 0.18]], 128, 64, 0.84);
   for (let index = 0; index < body.attributes.position.count; index++) {
+    const sourceHeight = body.attributes.position.getY(index);
+    const headWeight = 1 - THREE.MathUtils.smoothstep(body.attributes.position.getZ(index), -11, -4);
+    body.attributes.position.setY(index, sourceHeight * (1 - headWeight * (sourceHeight > 0 ? 0.36 : 0.15)) - headWeight * 0.16);
     const vertical = body.attributes.position.getY(index);
     const depth = body.attributes.position.getZ(index);
     const irregular = Math.sin(depth * 0.76) * 0.28 + Math.cos(body.attributes.position.getX(index) * 1.4 + depth) * 0.14;
@@ -136,38 +139,45 @@ export function createWhale() {
     colors.push(shade.r, shade.g, shade.b);
   }
   body.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  body.computeVertexNormals();
   root.add(mesh(body, material));
   const tubercleMaterial = new THREE.MeshStandardMaterial({ color: '#718e89', roughness: 0.8 });
+  const surfacePoint = (depth, angle) => {
+    const vertices = body.attributes.position; let row = 0;
+    for (let section = 1; section <= 128; section++) if (Math.abs(vertices.getZ(section * 65) - depth) < Math.abs(vertices.getZ(row * 65) - depth)) row = section;
+    const radius = vertices.getX(row * 65); const top = vertices.getY(row * 65 + 16); const bottom = vertices.getY(row * 65 + 48);
+    return [Math.sin(angle) * radius, (top + bottom) / 2 + Math.cos(angle) * (top - bottom) / 2 + 0.02, depth];
+  };
   for (let index = 0; index < 17; index++) {
     const depth = -13.2 + index % 6 * 1.05;
     const angle = (index % 3 - 1) * 0.72;
-    const radius = 2.3 + (depth + 13.2) * 0.14;
-    root.add(mesh(new THREE.SphereGeometry(0.1 + index % 3 * 0.025, 12, 8), tubercleMaterial, [Math.sin(angle) * radius, Math.cos(angle) * radius * 0.79, depth], [1, 0.48, 1.35]));
+    root.add(mesh(new THREE.SphereGeometry(0.1 + index % 3 * 0.025, 12, 8), tubercleMaterial, surfacePoint(depth, angle), [1, 0.48, 1.35]));
   }
   const fins = [];
   for (let side = -1; side <= 1; side += 2) {
-    const flipper = organicFin([[0, 0], [3, 2], [9, -2], [10, -6], [7, -7], [2, -3], [0, -1]], finMaterial, 0.14);
+    const flipper = organicFin([[0, 0], [3, 1.2], [8, -0.2], [11.8, -4.5], [12.2, -5.6], [8, -4.7], [5.7, -3.7], [3.3, -2.4], [1, -1.3], [0, -1]], finMaterial, 0.12);
     flipper.position.set(side * 3, -1, -3);
     flipper.scale.x = side;
     flipper.rotation.z = side * -0.6;
     root.add(flipper);
     fins.push(flipper);
-    root.add(mesh(new THREE.SphereGeometry(0.16, 24, 16), eyeMaterial, [side * 3.01, 0.12, -10.0]));
+    root.add(mesh(new THREE.SphereGeometry(0.16, 24, 16), eyeMaterial, [side * 3.21, -0.3, -9.8]));
     root.add(mesh(new THREE.SphereGeometry(0.028, 10, 8), throatMaterial, [side * 3.15, 0.16, -10.06]));
     const lipPoints = [new THREE.Vector3(side * 0.55, -0.3, -14.6), new THREE.Vector3(side * 2.78, -0.85, -12), new THREE.Vector3(side * 3.57, -1.0, -8.5)];
     root.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lipPoints), 24, 0.055, 6, false), eyeMaterial));
   }
-  for (let index = -4; index <= 4; index++) {
-    const horizontal = index * 0.42;
-    const path = new THREE.CatmullRomCurve3([new THREE.Vector3(horizontal * 0.5, -1.9, -12), new THREE.Vector3(horizontal, -3.2 + Math.abs(index) * 0.08, -6), new THREE.Vector3(horizontal * 0.7, -2.9, 0)]);
-    root.add(mesh(new THREE.TubeGeometry(path, 24, 0.035, 4, false), throatMaterial));
+  for (let index = -8; index <= 8; index++) {
+    const horizontal = index * 0.27;
+    const path = new THREE.CatmullRomCurve3([new THREE.Vector3(horizontal * 0.7, -2.12 + Math.abs(index) * 0.055, -12), new THREE.Vector3(horizontal, -3.02 + Math.abs(index) * 0.085, -6), new THREE.Vector3(horizontal * 0.65, -2.94 + Math.abs(index) * 0.03, 0)]);
+    root.add(mesh(new THREE.TubeGeometry(path, 24, 0.026, 4, false), throatMaterial));
   }
+  for (const side of [-1, 1]) root.add(mesh(new THREE.SphereGeometry(1, 16, 10), eyeMaterial, surfacePoint(-10.5, side * 0.085), [0.12, 0.045, 0.37]));
   const fluke = organicFin([[0, 0], [2, 0.7], [6.5, -1], [7, -3], [4, -2], [2, -2], [0, -1], [-2, -2], [-4, -2], [-7, -3], [-6.5, -1], [-2, 0.7], [0, 0]], finMaterial, 0.12);
   fluke.position.z = 17;
   root.add(fluke);
-  const dorsal = organicFin([[0, 0], [0.7, 1.5], [2.8, 3.1], [3.5, 1.8], [2.5, 1], [1, 0.2], [0, 0]], finMaterial, 0.09);
+  const dorsalMaterial = organicSurface(new THREE.MeshStandardMaterial({ color: '#334441', roughness: 0.61, side: THREE.DoubleSide }), 'whale', { relief: 0.024, length: 16 });
+  const dorsal = organicFin([[0, 0], [1.6, -0.5], [2.1, -2], [1.7, -2.6], [0.9, -2.5], [0.3, -1.2], [0, 0]], dorsalMaterial, 0.09);
   dorsal.rotation.z = Math.PI / 2;
-  dorsal.rotation.y = -Math.PI / 2;
   dorsal.position.set(0, 2.3, 5.5);
   root.add(dorsal);
   root.scale.setScalar(1.35);

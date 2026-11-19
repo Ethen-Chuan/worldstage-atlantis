@@ -16,20 +16,28 @@ function fixture() {
 
 test('lyrical songs use recorded buffers, animate the singer, and never overlap whale calls', () => {
   const { audio, sound, actor } = fixture();
-  audio.update([actor]); assert.equal(audio.inspect().singing, true); assert.equal(actor.root.userData.singing, true);
+  sound.context.currentTime = 30; audio.update([actor]); assert.equal(audio.inspect().singing, true); assert.equal(actor.root.userData.singing, true);
   for (let frame = 0; frame < 60; frame++) audio.update([actor]);
   assert.equal(sound.voices.size, 1); assert.equal(audio.whale({ force: true }), false);
   audio.activeSong.source.onended(); assert.equal(actor.root.userData.singing, false);
-  sound.context.currentTime = 75; assert.equal(audio.whale(), true);
+  sound.context.currentTime = 95; assert.equal(audio.whale(), true);
   assert.equal(audio.sing(actor, { force: true }), false);
 });
 
 test('departing singers fade out, and pause or mute stops foreground creature audio', () => {
-  const { audio, sound, actor } = fixture(); audio.sing(actor);
+  const { audio, sound, actor } = fixture(); audio.sing(actor, { force: true });
   audio.update([]); assert.equal(audio.activeSong, null); assert.equal(actor.root.userData.singing, false);
   sound.context.currentTime = 140; audio.whale(); sound.paused = true; audio.update([]);
   assert.equal(audio.activeWhale, null);
   sound.paused = false; sound.enabled = false; assert.equal(audio.sing(actor, { force: true }), false);
+});
+
+test('the ocean answers with a distant whale before automatic singing, even without a nearby actor', () => {
+  const { audio, sound, actor } = fixture();
+  sound.context.currentTime = 2; audio.update([]); assert.equal(audio.activeWhale, null);
+  sound.context.currentTime = 4; audio.update([actor]); assert.ok(audio.activeWhale); assert.equal(audio.activeSong, null);
+  audio.activeWhale.source.onended(); sound.context.currentTime = 30; audio.update([actor]); assert.ok(audio.activeSong);
+  audio.stop(); sound.context.currentTime = 150; audio.update([]); assert.ok(audio.activeWhale);
 });
 
 test('missing song asset is a visible error, never a synthesized substitute, and supports retry', async () => {

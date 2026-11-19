@@ -16,8 +16,9 @@ function referenceHeight(horizontal, depth) {
   for (const landmark of LANDMARKS) {
     if (landmark.kind === 'city') continue;
     const distance = Math.hypot(horizontal - landmark.center[0], depth - landmark.center[2]);
-    if (distance > 125) continue;
-    elevation += (naturalHeight(landmark.center[0], landmark.center[2]) - elevation) * (1 - smooth((distance - 65) / 60));
+    const radius = landmark.terrainRadius || 65;
+    if (distance > radius + 60) continue;
+    elevation += (naturalHeight(landmark.center[0], landmark.center[2]) - elevation) * (1 - smooth((distance - radius) / 60));
   }
   return elevation;
 }

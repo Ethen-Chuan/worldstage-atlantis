@@ -6,9 +6,11 @@ export const LANDMARKS = Object.freeze([
   { id: 'vortex', name: '星海之眼', english: 'THE EYE OF A THOUSAND TIDES', number: '05', center: [980, 78, -620], camera: [1010, 52, -398], target: [980, 76, -620], radius: 265, color: '#0b3445', caption: '千万道微光，汇成深海的瞳孔。', invitation: '唤醒星海之眼', gesture: '输入“唤醒星海之眼”，看鱼群展开，再重新汇聚。', kind: 'vortex', wonder: true, nocturne: 0.8 },
   { id: 'prism', name: '虹珊瑚海', english: 'THE GARDEN OF REFRACTED LIGHT', number: '06', center: [-880, 20, -1030], camera: [-812, 36, -866], target: [-880, 27, -1030], radius: 245, color: '#153a48', caption: '一束光经过，整片花园开始呼吸。', invitation: '唤醒虹珊瑚海', gesture: '输入“唤醒虹珊瑚海”，让光沿着珊瑚层层传开。', kind: 'prism', wonder: true, nocturne: 0.65 },
   { id: 'vents', name: '深渊光泉', english: 'THE FOUNTAINS BENEATH THE WORLD', number: '07', center: [760, 45, -1530], camera: [818, 40, -1330], target: [760, 55, -1530], radius: 255, color: '#122d40', caption: '海底的星火，向失落的天空升起。', invitation: '唤醒深渊光泉', gesture: '输入“唤醒深渊光泉”，让沉睡的光泉再次喷涌。', kind: 'vents', wonder: true, nocturne: 0.95 },
+  { id: 'crown', name: '潮冠宫城', english: 'THE PALACE OF PEARL AND GOLD', number: '08', center: [-610, 35, 440], camera: [-465, 77, 720], target: [-610, 62, 410], radius: 335, terrainRadius: 175, color: '#153e48', caption: '万盏琥珀灯，照见一座仍在等待来客的宫城。', invitation: '进入城堡', gesture: '点击入口光环，或输入“进入城堡”；五间房室由真实门洞相连。', kind: 'castle', nocturne: 0.3 },
 ]);
 
 export const ECOLOGY_VIEWS = Object.freeze([
+  { id: 'sunset-surface', name: '逐日海豚', camera: [48, 198, 130], target: [-5, 193, -5], caption: '跃出深蓝，追逐碎金铺满的海面。', gesture: '滚轮拉远或 Q 上浮可连续抵达海面；点击海豚进入它的视角。' },
   { id: 'reef-closeup', name: '珊瑚近岸', camera: [-98, 3, 201], target: [-105, 3, 161], caption: '从海扇的细枝之间，看见另一座活着的城。', gesture: '试试“创造三只鹦鹉螺”，再让它们慢慢游。' },
   { id: 'ancient-closeup', name: '古鱼巡游', camera: [8, 32, 105], target: [18, 30, 34], caption: '鳞甲记录潮汐，巨兽经过千年。', gesture: '装甲古鱼是幻想生物，并非科学复原；可创造属于你的同类。' },
 ]);

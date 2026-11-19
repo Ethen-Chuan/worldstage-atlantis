@@ -46,6 +46,25 @@ function membrane(root, outline, material, position, scale = [1, 1, 1], rotation
   return part(root, new THREE.ShapeGeometry(shape, 14), material, position, scale, rotation);
 }
 
+function turtleFlipper(root, material, position, side, front) {
+  const shape = new THREE.Shape(); shape.moveTo(0, 0); shape.bezierCurveTo(1, 0.7, 2.8, -0.6, 4.1, -2.8); shape.bezierCurveTo(4.3, -3.4, 2.4, -2.3, 0.1, -0.85); shape.bezierCurveTo(-0.25, -0.6, -0.25, -0.2, 0, 0);
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.07, bevelSize: 0.09, bevelSegments: 2, curveSegments: 16 });
+  geometry.rotateX(-Math.PI / 2);
+  return part(root, geometry, material, position, [side * (front ? 1 : 0.48), front ? 1 : 0.75, front ? 1 : 0.62]);
+}
+
+function turtleScute(root, material, seam, horizontal, depth, width, length) {
+  const surfaceHeight = (across, along) => 0.3 + 0.86 * Math.sqrt(Math.max(0, 1 - (across / 2.05) ** 2 - (along / 2.6) ** 2));
+  const vertices = [horizontal, surfaceHeight(horizontal, depth) + 0.018, depth]; const indices = []; const boundary = [];
+  for (let side = 0; side <= 6; side++) {
+    const angle = side / 6 * Math.PI * 2; const across = horizontal + Math.cos(angle) * width; const along = depth + Math.sin(angle) * length;
+    const point = [across, surfaceHeight(across, along) + 0.019, along]; vertices.push(...point); boundary.push(point);
+    if (side < 6) indices.push(0, side + 2, side + 1);
+  }
+  const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geometry.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(vertices.length / 3 * 2), 2)); geometry.setIndex(indices); geometry.computeVertexNormals();
+  part(root, geometry, material); tube(root, boundary, 0.012, seam, 24);
+}
+
 function patternedSkin(material, kind) {
   material.onBeforeCompile = shader => {
     shader.vertexShader = 'varying vec3 skinPosition;\n' + shader.vertexShader;
@@ -128,8 +147,8 @@ export function createAncientFish() {
 
 export function createTurtle() {
   const root = new THREE.Group(); root.name = 'reef-turtle'; root.userData.creature = 'turtle';
-  const skin = surface('#9a9b76', 0.78, 0); patternedSkin(skin, 'turtle'); const shell = surface('#65694a', 0.55, 0); patternedSkin(shell, 'turtle');
-  const seam = surface('#b9ad79', 0.8); const eye = surface('#162f2b', 0.22);
+  const skin = surface('#8e9573', 0.75, 0); patternedSkin(skin, 'turtle'); const shell = surface('#635b3f', 0.56, 0); patternedSkin(shell, 'turtle');
+  const seam = surface('#c9b482', 0.82); const eye = surface('#162520', 0.22); eye.userData.keepColor = true;
   ellipsoid(root, shell, [0, 0.3, 0], [2.05, 0.86, 2.6], 48);
   ellipsoid(root, seam, [0, -0.15, 0], [1.9, 0.45, 2.4]);
   ellipsoid(root, skin, [0, 0, -2.35], [0.44, 0.38, 0.8]);
@@ -138,14 +157,22 @@ export function createTurtle() {
   for (const side of [-1, 1]) ellipsoid(root, eye, [side * 0.48, 0.13, -3.05], [0.085, 0.12, 0.13], 12);
   for (let row = 0; row < 5; row++) {
     const depth = (row - 2) * 0.87;
-    const vertical = Math.sqrt(1 - depth * depth / 7) * 0.78 + 0.31;
-    const ring = part(root, new THREE.TorusGeometry(0.66, 0.019, 6, 6), seam, [0, vertical, depth], [1, 1, 1], [Math.PI / 2, 0, 0]);
-    ring.scale.set(0.95, 0.75, 1);
-    for (const side of [-1, 1]) tube(root, [[side * 0.65, vertical, depth], [side * 1.23, vertical - 0.17, depth + 0.15], [side * 1.75, 0.6, depth + 0.3]], 0.025, seam, 8);
+    turtleScute(root, shell, seam, 0, depth, 0.65, 0.57);
+    if (row < 4) for (const side of [-1, 1]) turtleScute(root, shell, seam, side * 1.06, depth + 0.4, 0.53, 0.65);
+  }
+  for (let index = 0; index < 26; index++) {
+    const angle = index / 26 * Math.PI * 2;
+    const point = [Math.cos(angle) * 2.02, 0.38, Math.sin(angle) * 2.57];
+    ellipsoid(root, shell, point, [0.19, 0.12, 0.17], 12);
+  }
+  for (const side of [-1, 1]) {
+    ellipsoid(root, shell, [side * 0.18, 0.477, -3.26], [0.14, 0.018, 0.18], 16);
+    ellipsoid(root, eye, [side * 0.17, 0.22, -3.665], [0.025, 0.03, 0.008], 10);
+    for (let index = 0; index < 7; index++) ellipsoid(root, shell, [side * (0.36 + Math.sin(index) * 0.06), 0.29 - index % 3 * 0.11, -3.44 + Math.floor(index / 3) * 0.26], [0.04, 0.06, 0.08], 10);
   }
   const flippers = [];
   for (const side of [-1, 1]) for (const front of [true, false]) {
-    const fin = membrane(root, [[0, 0], [1, -0.4], [3.3, -0.7], [3.9, 0.7], [3, 1.3], [0.8, 1.4], [0, 0]], skin, [side * 1.2, -0.1, front ? -1.1 : 1.8], [side * (front ? 1 : 0.55), front ? 1 : 0.6, 1], [-Math.PI / 2, 0, 0]);
+    const fin = turtleFlipper(root, skin, [side * 1.2, -0.1, front ? -1.1 : 1.8], side, front);
     flippers.push({ fin, side, front });
   }
   part(root, new THREE.ConeGeometry(0.24, 1.2, 10), skin, [0, 0, 2.6], [1, 1, 1], [Math.PI / 2, 0, 0]);

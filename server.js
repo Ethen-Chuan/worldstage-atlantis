@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { modelConfig, publicConfig, requestModelPlan } from './model-bridge.js';
 import { mediaConfig, publicMediaConfig, VideoBridge } from './video-bridge.js';
+import { synthesizeGate, gateText } from './gate-voice.js';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(directory, 'dist');
@@ -15,6 +16,7 @@ const media = mediaConfig();
 const video = new VideoBridge(media);
 const mediaRates = new Map();
 let modelBusy = false;
+let gateBusy = false;
 let lastModelRequest = 0;
 function json(response, status, value) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -25,6 +27,20 @@ const server = http.createServer(async (request, response) => {
   try {
     const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
     if (![`127.0.0.1:${port}`, `localhost:${port}`].includes(request.headers.host)) return json(response, 403, { error: '仅允许本机访问。' });
+    if (pathname === '/api/gate-voice' && request.method === 'POST') {
+      if (request.headers.origin !== `http://${request.headers.host}` || !request.headers['content-type']?.startsWith('application/json')) return json(response, 403, { error: '仅允许当前页面调用本机语音。' });
+      if (gateBusy) return json(response, 429, { error: '请等待上一段回声。' });
+      gateBusy = true;
+      try {
+        const chunks = []; let bytes = 0;
+        for await (const chunk of request) { bytes += chunk.length; if (bytes > 1500) return json(response, 413, { error: '回声文字过长。' }); chunks.push(chunk); }
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); gateText(payload.text);
+        const audio = await synthesizeGate(payload.text);
+        response.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': audio.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(audio);
+      } catch { return json(response, 503, { error: '本机深声未就绪，将尝试设备语音。' }); }
+      finally { gateBusy = false; }
+      return;
+    }
     if (pathname === '/api/config' && request.method === 'GET') return json(response, 200, publicConfig(config));
     if (pathname === '/api/media/config' && request.method === 'GET') return json(response, 200, publicMediaConfig(media));
     if (pathname.startsWith('/api/media/')) {

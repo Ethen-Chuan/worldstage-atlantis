@@ -5,7 +5,7 @@ import { dampAngle } from './swim.js';
 import { actorHull } from './collision-world.js';
 
 export function embodimentMarkup() {
-  return `<section id="inhabit-controls" class="inhabit-controls" aria-label="代入视角控制" hidden><div><span class="eyebrow" id="inhabit-mode"></span><strong id="inhabit-title"></strong><p id="inhabit-help"></p></div><div class="inhabit-actions"><button id="inhabit-view">切换第三人称</button><button id="inhabit-speak" aria-expanded="false">对世界说话</button><button id="inhabit-trial">以当前生物探索</button><button id="inhabit-exit">返回自由探索 <small>Esc</small></button></div></section><div id="swim-pad" class="swim-pad" aria-label="触屏移动" hidden><button data-swim="up" aria-label="上浮">升</button><button data-swim="forward" aria-label="向前游">↑</button><button data-swim="down" aria-label="下潜">降</button><button data-swim="left" aria-label="向左游">←</button><button data-swim="back" aria-label="向后游">↓</button><button data-swim="right" aria-label="向右游">→</button></div>`;
+  return `<section id="inhabit-controls" class="inhabit-controls" aria-label="代入视角控制" hidden><div><span class="eyebrow" id="inhabit-mode"></span><strong id="inhabit-title"></strong><p id="inhabit-help"></p></div><div class="inhabit-actions"><button id="inhabit-view">切换第三人称</button><button id="inhabit-speak" aria-expanded="false">对世界说话</button><button id="inhabit-trial">以当前生物探索</button><button id="inhabit-exit">返回自由探索 <small>Esc</small></button></div></section><div id="swim-pad" class="swim-pad" aria-label="触屏移动" hidden><button data-swim="up" aria-label="上浮">升</button><button data-swim="forward" aria-label="向前游">↑</button><button data-swim="down" aria-label="下潜">降</button><button data-swim="left" aria-label="向左转向">↶</button><button data-swim="back" aria-label="向后游">↓</button><button data-swim="right" aria-label="向右转向">↷</button></div>`;
 }
 
 function visible(object) {
@@ -32,6 +32,8 @@ export class Embodiment {
   pick(raycaster) {
     this.candidate = null;
     const roots = [this.ocean.city, this.ocean.creationScene.root, this.ocean.ecology.root, ...Object.values(this.ocean.creatures || {}).map(creature => creature.root), ...this.ocean.landmarks.entries.map(entry => entry.root), ...[...this.ocean.wonders.entries.values()].map(entry => entry.root), ...[...this.ocean.endless.chunks.values()].map(tile => tile.ground)].filter(Boolean);
+    if (this.ocean.palace) roots.push(this.ocean.palace.root);
+    if (this.ocean.surface) roots.push(...this.ocean.surface.animals.map(animal => animal.root));
     const hit = raycaster.intersectObjects(roots, true).find(hit => {
       if (hit.distance >= 850 || !hit.object.isMesh || !visible(hit.object)) return false;
       for (let ancestor = hit.object; ancestor; ancestor = ancestor.parent) if (ancestor === this.active?.root) return false;
@@ -48,9 +50,9 @@ export class Embodiment {
     const point = hit.point.clone().add(this.ocean.worldOffset);
     let candidate;
     if (authored) candidate = { root: authored.root, shape: authored.shape, living: LIVING_ASSETS.includes(authored.item.asset), species: authored.item.asset, name: authored.item.name, id: authored.item.id, point };
-    else if (creature) candidate = { root: creature, shape: creature, living: true, species: creature.userData.creature, name: ASSETS[creature.userData.creature] || '海洋生物', point };
+    else if (creature) candidate = { root: creature, shape: creature, living: true, species: creature.userData.creature, name: creature.userData.displayName || ASSETS[creature.userData.creature] || '海洋生物', point };
     else if (hit.object.isInstancedMesh && hit.object.userData.creature) candidate = { root: hit.object, species: hit.object.userData.creature, living: true, name: '一尾游鱼', instance: hit.instanceId, point };
-    else candidate = { root: hit.object, living: false, name: hit.object.name === 'ground' ? '这片海床' : '眼前的遗迹与珊瑚', point };
+    else candidate = { root: hit.object, living: false, name: hit.object.name === 'ground' ? '这片海床' : hit.object.name || '眼前的遗迹与珊瑚', point, palaceDestination: hit.object.userData.palaceDestination };
     if (hit.object.isInstancedMesh && creature === hit.object) { candidate.instance = hit.instanceId; candidate.point = point; }
     this.candidate = candidate;
     return candidate;
@@ -79,6 +81,7 @@ export class Embodiment {
     this.radius = target.living ? THREE.MathUtils.clamp(size.length() * 0.52, 4, 65) : THREE.MathUtils.clamp(size.length() * 0.1, 14, 70);
     this.position = target.living ? target.root.getWorldPosition(new THREE.Vector3()).add(this.ocean.worldOffset) : target.point.clone();
     this.heading = target.shape?.rotation.y || 0;
+    this.steeringHeading = this.heading;
     this.desiredHeading = null;
     this.collisionHull = target.living ? actorHull(target) : null;
     if (target.living && this.ocean.collisions) this.position.copy(this.ocean.collisions.move(this.position, this.position, { hull: this.collisionHull, ignore: target.root }));
@@ -155,10 +158,12 @@ export class Embodiment {
     }
     if (target.source) { target.sourceMatrix = new THREE.Matrix4(); target.source.getMatrixAt(target.instance, target.sourceMatrix); target.source.setMatrixAt(target.instance, new THREE.Matrix4().makeScale(0, 0, 0)); target.source.instanceMatrix.needsUpdate = true; }
     if (this.blend) {
+      const previousCamera = this.ocean.camera.position.clone().add(this.ocean.worldOffset);
       const blend = this.blend; blend.elapsed += delta;
       const progress = Math.min(1, blend.elapsed / blend.duration); const eased = progress * progress * (3 - 2 * progress);
       this.ocean.camera.position.lerpVectors(blend.origin, blend.destination, eased).sub(this.ocean.worldOffset);
       this.ocean.controls.target.lerpVectors(blend.look, blend.target, eased).sub(this.ocean.worldOffset);
+      if (this.ocean.collisions) this.ocean.camera.position.copy(this.ocean.collisions.move(previousCamera, this.ocean.camera.position.clone().add(this.ocean.worldOffset), { radius: 1.2, ignore: target.root })).sub(this.ocean.worldOffset);
       if (target.living) {
         target.root.parent.updateWorldMatrix(true, false); target.root.position.copy(target.root.parent.worldToLocal(this.position.clone().sub(this.ocean.worldOffset))); target.root.visible = !this.firstPerson || progress < 0.78;
         target.shape.rotation.y = this.heading;
@@ -170,16 +175,16 @@ export class Embodiment {
     if (!target.living) { this.ocean.controls.target.copy(this.position).sub(this.ocean.worldOffset); return; }
     const previous = this.position.clone();
     if (this.desiredHeading != null) {
-      const difference = Math.atan2(Math.sin(this.desiredHeading - this.heading), Math.cos(this.desiredHeading - this.heading));
+      const difference = Math.atan2(Math.sin(this.desiredHeading - this.steeringHeading), Math.cos(this.desiredHeading - this.steeringHeading));
       const turnRate = target.species === 'whale' ? 0.65 : 1.8;
-      this.heading += THREE.MathUtils.clamp(difference, -turnRate * delta, turnRate * delta);
+      this.steeringHeading += THREE.MathUtils.clamp(difference, -turnRate * delta, turnRate * delta);
       if (Math.abs(difference) < 0.001) this.desiredHeading = null;
     }
-    const forward = this.firstPerson ? new THREE.Vector3(-Math.sin(this.heading), 0, -Math.cos(this.heading)) : this.ocean.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
-    const right = new THREE.Vector3(-forward.z, 0, forward.x);
     const desired = new THREE.Vector3(); const keys = this.ocean.movement;
+    const turnSpeed = target.species === 'whale' ? 0.65 : 1.2;
+    this.steeringHeading += ((keys.has('left') ? 1 : 0) - (keys.has('right') ? 1 : 0)) * turnSpeed * delta;
+    const forward = new THREE.Vector3(-Math.sin(this.steeringHeading), 0, -Math.cos(this.steeringHeading));
     if (keys.has('forward')) desired.add(forward); if (keys.has('back')) desired.sub(forward);
-    if (keys.has('left')) desired.sub(right); if (keys.has('right')) desired.add(right);
     if (keys.has('up')) desired.y += 0.65; if (keys.has('down')) desired.y -= 0.65;
     const speed = target.species === 'whale' ? 25 : target.species === 'turtle' ? 17 : 32;
     if (desired.lengthSq() > 1) desired.normalize(); desired.multiplyScalar(speed * (keys.has('fast') ? 1.8 : 1));
@@ -194,7 +199,9 @@ export class Embodiment {
       this.ocean.collisions.remember(target, safe);
     }
     this.position.y = Math.max(seaHeight(this.position.x, this.position.z) + Math.min(this.radius * 0.25, 12) + 3, this.position.y);
-    if (!this.firstPerson && Math.hypot(this.velocity.x, this.velocity.z) > 0.2) this.heading = dampAngle(this.heading, Math.atan2(-this.velocity.x, -this.velocity.z), 2, delta);
+    const displacement = this.position.clone().sub(previous);
+    const moving = Math.hypot(displacement.x, displacement.z) > 0.0001;
+    this.heading = dampAngle(this.heading, moving ? Math.atan2(-displacement.x, -displacement.z) : this.steeringHeading, target.species === 'whale' ? 2.2 : 5, delta);
     const local = this.position.clone().sub(this.ocean.worldOffset); target.root.parent.updateWorldMatrix(true, false);
     target.root.position.copy(target.root.parent.worldToLocal(local.clone())); target.shape.rotation.y = this.heading;
     target.root.visible = !this.firstPerson;
@@ -208,7 +215,14 @@ export class Embodiment {
       const direction = new THREE.Vector3(-Math.sin(this.heading) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.heading) * Math.cos(this.pitch));
       this.ocean.camera.position.copy(local).addScaledVector(direction, this.radius * 0.55); this.ocean.camera.position.y += this.radius * 0.08;
       this.ocean.controls.target.copy(this.ocean.camera.position).add(direction); this.ocean.camera.lookAt(this.ocean.controls.target);
-    } else { this.ocean.camera.position.add(this.position.clone().sub(previous)); this.ocean.controls.target.copy(local); }
+    } else {
+      this.ocean.camera.position.add(displacement);
+      if (moving) {
+        const behind = new THREE.Vector3(0, this.radius * 0.38 + 3, this.radius * 1.85).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.heading).add(local);
+        this.ocean.camera.position.lerp(behind, 1 - Math.exp(-delta * 2.5));
+      }
+      this.ocean.controls.target.copy(local);
+    }
   }
 
   exit(restore = true) {

@@ -1,7 +1,8 @@
 import { LANDMARKS, ECOLOGY_VIEWS } from './landmarks.js';
 import { validateCreationPlan } from './creation.js';
+import { PALACE_ROOMS } from './palace-district.js';
 
-const commands = new Set(['creation', 'travel', 'ritual', 'calm', 'trial', 'talk', 'sing', 'inhabit', 'release-view', 'switch-view', 'cruise', 'whale-fall']);
+const commands = new Set(['creation', 'travel', 'ritual', 'calm', 'trial', 'talk', 'sing', 'inhabit', 'release-view', 'switch-view', 'cruise', 'whale-fall', 'palace-room']);
 const speciesNames = { 鲸鱼: 'whale', 鲨鱼: 'shark', 灰礁鲨: 'shark', 海龟: 'turtle', 蝠鲼: 'manta', 美人鱼: 'mermaid', 人鱼: 'mermaid', 水母: 'jelly', 鱼群: 'shoal', 装甲古鱼: 'ancient', 古鱼: 'ancient', 鹦鹉螺: 'nautilus' };
 const summonNames = ['鲸鱼', '鲨鱼', '灰礁鲨', '蝠鲼', '海龟', '水母', '鱼群'];
 const destinations = [...LANDMARKS, ...ECOLOGY_VIEWS];
@@ -9,6 +10,10 @@ const destinations = [...LANDMARKS, ...ECOLOGY_VIEWS];
 export function planWorld(text, context = {}) {
   const input = String(text).trim();
   if (!input || /^(?:不要|别|不许|禁止)/.test(input)) return null;
+  if (/^(?:请)?(?:进入|走进|参观)(?:城堡|宫殿|宫城|潮冠宫城)[。！!]*$/.test(input)) return worldAction('palace-room', { room: 'reception' });
+  if (/^(?:离开|退出|走出)(?:城堡|宫殿|宫城)[。！!]*$/.test(input)) return worldAction('palace-room', { room: 'exit' });
+  const room = PALACE_ROOMS.find(room => new RegExp(`^(?:请)?(?:去|进入|参观|前往|带我去)(?:${room.name}|${room.name.slice(2)})[。！!]*$`).test(input));
+  if (room) return worldAction('palace-room', { room: room.id });
   if (/^(?:请|让)?(?:美人鱼|人鱼)(?:唱歌|唱一首歌|唱一段歌)[。！!]*$/.test(input)) return worldAction('sing', { species: 'mermaid' });
   if (/^(?:观看|看一场|开始)鲸落(?:叙事)?[。！!]*$/.test(input)) return worldAction('whale-fall', { enabled: true });
   if (/^结束鲸落(?:叙事)?[。！!]*$/.test(input)) return worldAction('whale-fall', { enabled: false });
@@ -20,6 +25,8 @@ export function planWorld(text, context = {}) {
   if (invocation) return worldAction('ritual', { site: LANDMARKS.find(site => site.name === invocation[1]).id, summon: invocation[2] || null });
   const echo = input.match(/^(?:请)?唤醒回声天门[，,\s]+(?:呼唤|唤回|念出)(.{1,100})[。！!]*$/);
   if (echo) return worldAction('ritual', { site: 'gate', echo: echo[1].trim().replace(/[。！!]+$/, '') });
+  const directEcho = input.match(/^(?:(?:回声之门|回声天门|天门)[，,:：\s]+|(?:向|对)(?:回声之门|回声天门|天门)(?:说|呼唤)[，,:：\s]*)(.{1,100})$/);
+  if (directEcho) return worldAction('ritual', { site: 'gate', echo: directEcho[1].trim() });
   if (/^(?:请)?(?:唤醒|奏响)(?:眼前的奇观|这里的奇观)[。！!]*$/.test(input)) return worldAction('ritual', { site: context.site || null });
   if (/^(?:请)?(?:让海流平静|结束盛典|让(?:这里的|眼前的)?奇观平静下来)[。！!]*$/.test(input)) return worldAction('calm');
   const talk = input.match(/^(?:和|与|呼唤)(鲸鱼|鲨鱼|灰礁鲨|海龟|蝠鲼|美人鱼|人鱼|水母|鱼群|装甲古鱼|古鱼|鹦鹉螺)(?:对话|说话|打招呼|回应我)?[。！!]*$/);
@@ -37,8 +44,13 @@ export function worldAction(kind, args = {}) { return { version: 1, kind, args: 
 export function validateWorldPlan(plan, state) {
   if (!plan || plan.version !== 1 || !commands.has(plan.kind) || plan.source !== 'local-planner' || Object.keys(plan).some(key => !['version', 'kind', 'args', 'source'].includes(key))) throw new Error('世界指令不符合受限协议。');
   if (!plan.args || typeof plan.args !== 'object' || Array.isArray(plan.args)) throw new Error('世界指令参数无效。');
-  const allowed = { creation: ['plan', 'text', 'provenance'], travel: ['site', 'mode'], ritual: ['site', 'summon', 'echo'], calm: [], trial: ['site', 'species'], talk: ['species'], sing: ['species'], inhabit: ['species', 'target'], 'release-view': [], 'switch-view': [], cruise: ['enabled'], 'whale-fall': ['enabled'] }[plan.kind];
+  const allowed = { creation: ['plan', 'text', 'provenance'], travel: ['site', 'mode'], ritual: ['site', 'summon', 'echo'], calm: [], trial: ['site', 'species'], talk: ['species'], sing: ['species'], inhabit: ['species', 'target'], 'release-view': [], 'switch-view': [], cruise: ['enabled'], 'whale-fall': ['enabled'], 'palace-room': ['room'] }[plan.kind];
   if (Object.keys(plan.args).some(key => !allowed.includes(key))) throw new Error('世界指令含未知参数。');
+  if (plan.kind === 'palace-room') {
+    if (!['exit', ...PALACE_ROOMS.map(room => room.id)].includes(plan.args.room)) throw new Error('宫城中没有这个房间。');
+    const palace = destinations.find(site => site.id === 'crown');
+    if (!Array.isArray(state.position) || !state.position.every(Number.isFinite) || Math.hypot(state.position[0] - palace.center[0], state.position[2] - palace.center[2]) > 440) throw new Error('先在海图前往潮冠宫城，再从正门进入。');
+  }
   if (['travel', 'ritual', 'trial'].includes(plan.kind)) {
     const destination = destinations.find(site => site.id === plan.args.site);
     if (!destination || (plan.kind !== 'travel' && !destination.center)) throw new Error('请先抵达一处遗迹或奇观。');

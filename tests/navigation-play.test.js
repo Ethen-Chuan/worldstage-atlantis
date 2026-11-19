@@ -51,7 +51,7 @@ test('mutual landmark distances are symmetric and scale labels reflect actual pr
 });
 
 test('seven sites expose playable rules without claiming seven unrelated game engines', () => {
-  assert.deepEqual(Object.keys(SITE_PLAY), LANDMARKS.map(site => site.id));
+  assert.deepEqual(Object.keys(SITE_PLAY), LANDMARKS.filter(site => site.kind !== 'castle').map(site => site.id));
   assert.deepEqual(new Set(Object.values(SITE_PLAY).map(play => play.mode)), new Set(['route', 'collect', 'rhythm']));
 });
 

@@ -4,7 +4,7 @@ import { SCORES, composeScore, orchestralMix, scaleNote, scoreFor } from '../src
 import { SceneTap } from '../src/scene-tap.js';
 import { OceanSound } from '../src/sound.js';
 
-test('seven complete original scores have distinct melodies and layered orchestration', () => {
+test('landmarks and the surface have distinct melodies and layered orchestration', () => {
   const identities = new Set();
   for (const site of Object.keys(SCORES)) {
     const score = composeScore(site); identities.add(JSON.stringify(score.melody));
@@ -17,7 +17,7 @@ test('seven complete original scores have distinct melodies and layered orchestr
       assert.ok(event.gain > 0 && event.gain < 0.5);
     }
   }
-  assert.equal(identities.size, 7);
+  assert.equal(identities.size, Object.keys(SCORES).length); assert.equal(identities.size, 9);
 });
 
 test('music stays melodic at rest and blossoms at the visual climax', () => {

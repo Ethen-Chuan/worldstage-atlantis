@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createFlowDeformer } from './flow-deformation.js';
+import { humanGeometry, detailedFace, scalpGeometry } from './human-detail.js';
 
 function mergeStillMeshes(group, excluded = []) {
   const materials = new Map();
@@ -79,32 +80,25 @@ export function createMermaid() {
   const bodiceProfile = [[0.43,0.15],[0.5,0.35],[0.4,0.72],[0.34,1.02],[0.42,1.35],[0.525,1.68],[0.51,1.89]].map(([radius,height])=>new THREE.Vector2(radius,height));
   const bodice = new THREE.Mesh(new THREE.LatheGeometry(bodiceProfile, 48), tailMaterial); bodice.scale.z = 0.71; body.add(bodice);
   const head = new THREE.Group(); head.position.set(0,2.72,-0.03); head.rotation.set(-0.04,0.1,-0.08); body.add(head);
-  const face = new THREE.SphereGeometry(1,64,48); const positions = face.attributes.position;
-  for(let index=0;index<positions.count;index++) {
-    const horizontal=positions.getX(index);const vertical=positions.getY(index);const depth=positions.getZ(index);const front=Math.max(0,-depth);
-    const jaw=vertical < -0.15 ? 1-(-vertical-0.15)*0.36 : 1;
-    const nose=Math.exp(-((horizontal/0.2)**2)-(((vertical+0.05)/0.32)**2))*0.065;
-    positions.setXYZ(index,horizontal*0.295*jaw,vertical*0.415,depth*0.258-front*nose);
-  }
-  face.computeVertexNormals();head.add(new THREE.Mesh(face,skin));
+  const detail = detailedFace(head,skin,pearl,iris,dark);
+  const mouthOpen = { value: 0 };
+  detail.face.material.onBeforeCompile = shader => {
+    shader.uniforms.mouthOpen = mouthOpen;
+    shader.vertexShader = 'uniform float mouthOpen;\n' + shader.vertexShader;
+    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nfloat jawWeight=exp(-pow(position.x/0.13,4.0))*smoothstep(0.14,0.23,-position.z)*(1.0-smoothstep(-0.16,-0.10,position.y)); transformed.y-=jawWeight*mouthOpen*0.022;');
+  };
+  detail.face.material.customProgramCacheKey = () => 'mermaid-anatomical-face-1';
   const eyelids=[];
+  for (const eye of detail.eyes) {
+    eye.sclera.geometry.computeBoundingBox(); const center=eye.sclera.geometry.boundingBox.getCenter(new THREE.Vector3());
+    const lid=ellipsoid(head,skin,[center.x,center.y+0.006,center.z-0.028],[0.029,0.001,0.01],24);eyelids.push(lid);
+  }
   for(const side of [-1,1]) {
-    ellipsoid(head,pearl,[side*0.112,0.062,-0.238],[0.074,0.033,0.026]);
-    ellipsoid(head,iris,[side*0.106,0.061,-0.263],[0.024,0.026,0.009]);
-    ellipsoid(head,dark,[side*0.106,0.061,-0.271],[0.01,0.019,0.004],16);
-    ellipsoid(head,pearl,[side*0.1,0.072,-0.277],[0.006,0.006,0.002],12);
-    filament(head,[[side*0.041,0.065,-0.252],[side*0.113,0.095,-0.257],[side*0.181,0.057,-0.218]],0.007,dark);
-    filament(head,[[side*0.05,0.16,-0.236],[side*0.11,0.176,-0.238],[side*0.185,0.142,-0.208]],0.008,hairMaterial);
-    const lid=ellipsoid(head,skin,[side*0.112,0.063,-0.267],[0.075,0.034,0.012]);eyelids.push(lid);
-    ellipsoid(head,skin,[side*0.285,-0.005,0],[0.045,0.095,0.045]);
     filament(head,[[side*0.28,-0.03,-0.01],[side*0.33,-0.17,0],[side*0.31,-0.27,-0.02]],0.009,gold);
     ellipsoid(head,pearl,[side*0.31,-0.27,-0.02],[0.025,0.042,0.02],16);
   }
-  ellipsoid(head,skin,[0,-0.052,-0.293],[0.034,0.047,0.039]);
-  filament(head,[[-0.063,-0.169,-0.231],[-0.025,-0.16,-0.263],[0,-0.168,-0.268],[0.025,-0.16,-0.263],[0.063,-0.169,-0.231]],0.009,lips);
-  const lowerLip=ellipsoid(head,lips,[0,-0.185,-0.251],[0.049,0.013,0.013]);
   const animated=[];const hair=new THREE.Group();head.add(hair);
-  ellipsoid(hair,hairMaterial,[0,0.11,0.078],[0.311,0.343,0.252]);
+  hair.add(new THREE.Mesh(scalpGeometry(),hairMaterial));
   for(let strand=0;strand<24;strand++) {
     const side=strand%2?-1:1;const phase=strand*2.399;const width=0.065+strand%4*0.022;
     ribbon(hair,hairMaterial,[[Math.sin(phase)*0.26,0.31,0.12+Math.cos(phase)*0.1],[side*(0.3+strand%3*0.025),-0.1,0.16],[side*(0.45+strand%5*0.08),-0.8,0.34],[side*(0.75+strand%4*0.17),-1.8-strand%3*0.2,0.5],[side*(0.92+strand%4*0.18),-2.6-strand%3*0.2,0.9]],width,phase,animated);
@@ -121,12 +115,10 @@ export function createMermaid() {
     const forearm=new THREE.Group();forearm.position.y=-0.69;shoulder.add(forearm);
     ellipsoid(forearm,skin,[0,0,0],[0.12,0.14,0.115]);
     limb(forearm,skin,[[0.06,-0.67],[0.065,-0.56],[0.09,-0.34],[0.115,-0.1],[0.1,0.05]]);
-    ellipsoid(forearm,skin,[0,-0.67,-0.015],[0.082,0.145,0.043]);
-    for(let finger=0;finger<4;finger++){const horizontal=(finger-1.5)*0.033;const length=0.16+Math.sin((finger+1)/5*Math.PI)*0.075;filament(forearm,[[horizontal,-0.75,-0.015],[horizontal*1.16,-0.82-length*0.4,-0.042],[horizontal*1.28,-0.8-length,-0.06]],0.012,skin);}
-    filament(forearm,[[side*0.068,-0.63,-0.02],[side*0.13,-0.76,-0.03],[side*0.12,-0.82,-0.05]],0.019,skin);
+    const hand = new THREE.Mesh(humanGeometry('hand', side > 0), skin); hand.name='人鱼手部 · 指节与指甲'; hand.position.set(0,-0.6,-0.005); forearm.add(hand);
     const cuff=new THREE.Mesh(new THREE.TorusGeometry(0.11,0.018,8,28),gold);cuff.rotation.x=Math.PI/2;cuff.position.y=-0.52;forearm.add(cuff);
     ribbon(forearm,silk,[[0,-0.5,0.03],[side*0.3,-0.85,0.4],[side*0.48,-1.4,0.8],[side*0.86,-2,1.15]],0.21,side*1.5,animated);
-    arms.push({shoulder,forearm,side});
+    arms.push({shoulder,forearm,hand,side});
     filament(body,[[side*0.14,2.2,-0.13],[side*0.34,1.9,-0.28],[side*0.49,1.57,-0.22],[side*0.29,1,-0.25],[side*0.48,0.4,-0.21]],0.015,gold);
     for(let jewel=0;jewel<18;jewel++)ellipsoid(body,jewel%3?pearl:iris,[side*(0.13+Math.sin(jewel*0.35)*0.23),1.85-jewel*0.07,-0.34],[0.018,0.025,0.018],12);
     ribbon(body,silk,[[side*0.36,0.4,0],[side*1,0,0.2],[side*1.55,-1.2,0.5],[side*2,-2.1,1]],0.64,side*2,animated);
@@ -142,14 +134,14 @@ export function createMermaid() {
   }
   for(let bead=0;bead<18;bead++){const angle=bead/18*Math.PI*2;ellipsoid(body,pearl,[Math.cos(angle)*0.5,0.32+Math.sin(angle*3)*0.06,Math.sin(angle)*0.35],[0.024,0.025,0.024],12);}
   root.scale.setScalar(1.4);root.userData.singing=false;
-  const movingMeshes = [...animated.map(entry => entry.mesh), lowerLip, ...eyelids];
+  const movingMeshes = [...animated.map(entry => entry.mesh), detail.face, ...eyelids, ...arms.map(arm=>arm.hand)];
   for (const group of [body, head, ...arms.flatMap(arm => [arm.shoulder, arm.forearm])]) mergeStillMeshes(group, movingMeshes);
   return {root,animate(time){
     timeUniform.value=time;body.rotation.x=-0.15+Math.sin(time*0.38)*0.13;body.rotation.z=Math.sin(time*0.32)*0.06;
     head.rotation.y=0.1+Math.sin(time*0.3)*0.14;head.rotation.z=-0.08+Math.sin(time*0.43)*0.035;
-    const blink=time%5.8;eyelids.forEach(lid=>lid.visible=blink>5.56&&blink<5.76);
-    lowerLip.position.y=-0.185-(root.userData.singing?(0.5+Math.sin(time*7)*0.5)*0.023:0);
-    arms.forEach(({shoulder,forearm,side})=>{shoulder.rotation.z=side*(0.38+Math.sin(time*0.53+side)*0.18);shoulder.rotation.x=-0.13+Math.sin(time*0.44+side)*0.18;forearm.rotation.x=-0.3+Math.sin(time*0.57+side)*0.2;forearm.rotation.z=side*0.16;});
+    const blink=time%5.8; const closure=blink>5.4?Math.sin((blink-5.4)/0.4*Math.PI):0;eyelids.forEach(lid=>{lid.visible=closure>0.01;lid.scale.y=0.034*Math.max(0,closure);});
+    mouthOpen.value=root.userData.singing?0.5+Math.sin(time*7)*0.5:0;
+    arms.forEach(({shoulder,forearm,hand,side})=>{shoulder.rotation.z=side*(0.38+Math.sin(time*0.53+side)*0.18);shoulder.rotation.x=-0.13+Math.sin(time*0.44+side)*0.18;forearm.rotation.x=-0.3+Math.sin(time*0.57+side)*0.2;forearm.rotation.z=side*0.16;hand.rotation.x=Math.sin(time*0.67+side)*0.14;hand.rotation.z=side*Math.sin(time*0.37)*0.07;});
     for(const entry of animated)entry.deform.update(time);
     const attachmentWeight=Math.max(0,-attachment.y)/4.2;
     fins.position.set(attachment.x+Math.sin(time*0.9+attachmentWeight*4)*attachmentWeight*attachmentWeight*0.34,attachment.y,attachment.z+Math.sin(time*0.65-attachmentWeight*4)*attachmentWeight*attachmentWeight*0.18);

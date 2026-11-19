@@ -97,12 +97,12 @@ export class TidePlay {
   }
 
   awaken(id, { quiet = false } = {}) {
-    const landmark = LANDMARKS.find(site => site.id === id); if (!landmark) return false;
+    const landmark = LANDMARKS.find(site => site.id === id); if (!landmark || !SITE_PLAY[id]) return false;
     const position = this.ocean.worldPosition();
     if (Math.hypot(position.x - landmark.center[0], position.z - landmark.center[2]) > landmark.radius + 50) return false;
     this.show = { id, start: this.ocean.time, ending: null };
     SITE_PLAY[id].colors.forEach((color, index) => this.festival.material.uniforms[['tintA', 'tintB', 'tintC'][index]].value.set(color));
-    this.festival.visible = true; if (!quiet && id === 'gate') this.sound.ritual(id); this.ocean.wonders.activate(id, position); this.ocean.landmarks.respond(id, this.ocean.time);
+    this.festival.visible = id !== 'prism'; if (!quiet && id === 'gate') this.sound.ritual(id); this.ocean.wonders.activate(id, position); this.ocean.landmarks.respond(id, this.ocean.time);
     this.ocean.callbacks.onCeremony?.();
     return true;
   }
@@ -111,7 +111,7 @@ export class TidePlay {
 
   start(id, species = 'manta') {
     this.stop();
-    const site = LANDMARKS.find(landmark => landmark.id === id); if (!site) return;
+    const site = LANDMARKS.find(landmark => landmark.id === id); if (!site || !SITE_PLAY[id]) return;
     const factories = { manta: createManta, shark: createShark, turtle: createTurtle, whale: createWhale };
     const round = this.rounds.get(id) || 0; this.rounds.set(id, round + 1);
     const course = trialCourse(site, round); const { heading } = course;

@@ -27,6 +27,9 @@ import { clamp } from './core.js';
 import { Embodiment } from './embodiment.js';
 import { TidePlay } from './tide-play.js';
 import { LIVING_ASSETS } from './creation.js';
+import { PalaceDistrict } from './palace-district.js';
+import { travelGaze } from './travel-gaze.js';
+import { SunsetSea } from './sunset-sea.js';
 
 class OceanOcclusionPass extends GTAOPass {
   render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
@@ -80,6 +83,7 @@ export class Ocean {
     this.travelTarget = null;
     this.uniforms = { time: { value: 0 }, offset: { value: this.worldOffset }, night: { value: 0 }, skyTop: { value: new THREE.Color().setRGB(0.075, 0.29, 0.32) }, skyBottom: { value: new THREE.Color().setRGB(0.012, 0.04, 0.055) }, skySun: { value: 1 } };
     this.scene = new THREE.Scene();
+    this.uniforms.surface = { value: 0 };
     this.scene.background = new THREE.Color('#092c3a');
     this.scene.fog = new THREE.FogExp2('#244e50', 0.0024);
     this.camera = new THREE.PerspectiveCamera(46, 1, 0.4, 1500);
@@ -110,6 +114,7 @@ export class Ocean {
     this.controls.maxPolarAngle = Math.PI * 0.85;
     this.controls.maxTargetRadius = Infinity;
     this.controls.addEventListener('start', () => {
+      this.palaceRoute = null;
       this.travelTarget = null;
       if (this.flight) {
         this.flight = null;
@@ -135,6 +140,7 @@ export class Ocean {
     this.scene.add(this.hemisphere, this.sun, this.sun.target, this.rim, this.front);
     this.materials = makeMaterials(this.uniforms);
     this.city = buildReferenceAtlantis(this.scene, this.materials);
+    this.palace = new PalaceDistrict(this.scene);
     this.landmarks = new LandmarkScene(this.scene, this.materials);
     this.wonders = new WonderScene(this.scene, this.materials);
     this.ecology = new OceanEcology(this.scene);
@@ -142,6 +148,7 @@ export class Ocean {
     this.endless.update(this.camera.position, this.worldOffset, 0, 'arrival');
     this.creationScene = new CreationScene(this.scene, this.materials);
     this.sky = buildAtmosphere(this.scene, this.uniforms);
+    this.surface = new SunsetSea(this.scene);
     this.biomes = null;
     this.creatures = { manta: createManta(), whale: createWhale(), jelly: createJellies() };
     Object.values(this.creatures).forEach(creature => this.scene.add(creature.root));
@@ -192,6 +199,7 @@ export class Ocean {
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const candidate = this.embodiment.pick(this.raycaster);
       if (candidate) {
+        if (candidate.palaceDestination) { this.callbacks.onPalaceDoor?.(candidate.palaceDestination); return; }
         if (candidate.id) this.callbacks.onCreationSelect?.(candidate.id);
         else if (!candidate.living) this.callbacks.onAnchor?.(candidate.point.toArray());
         this.callbacks.onObjectInspect?.(candidate);
@@ -288,7 +296,23 @@ export class Ocean {
     this.travelDuration = Math.max(1.8, Math.min(24, this.travelOrigin.distanceTo(this.travelTarget) / 64));
   }
 
+  enterPalace(id) {
+    const route = this.palace.route(this.worldPosition(), id);
+    if (!route) return false;
+    this.embodiment.exit(false); this.play.stop(); this.flight = null;
+    this.palaceRoute = route; this.advancePalaceRoute(); return true;
+  }
+
+  advancePalaceRoute() {
+    const route = this.palaceRoute; if (!route) return;
+    const destination = route.points.shift();
+    if (!destination) { this.palaceRoute = null; return; }
+    this.travelTo(destination, route.points[0] || route.target);
+    this.travelDuration = Math.max(1.5, this.travelOrigin.distanceTo(this.travelTarget) / 12);
+  }
+
   restoreView(view) {
+    this.palaceRoute = null;
     this.travelTarget = null;
     this.flight = null;
     this.cruising = false;
@@ -309,6 +333,7 @@ export class Ocean {
   captureView() { return { position: this.worldPosition().toArray(), target: this.controls.target.clone().add(this.worldOffset).toArray() }; }
 
   prepareDestination(landmark) {
+    if (landmark.id === 'crown') this.palace.prepare();
     this.landmarks.prepare(landmark.id);
     if (landmark.wonder && !this.wonders.entries.has(landmark.id)) this.wonders.build(landmark);
   }
@@ -332,9 +357,12 @@ export class Ocean {
       const progress = Math.min(1, this.travelElapsed / this.travelDuration);
       const eased = progress * progress * (3 - 2 * progress);
       this.camera.position.lerpVectors(this.travelOrigin, this.travelTarget, eased).sub(this.worldOffset);
-      this.camera.position.y += Math.sin(progress * Math.PI) * Math.min(22, this.travelDuration);
-      this.controls.target.lerpVectors(this.travelOriginLook, this.travelLook, eased).sub(this.worldOffset);
-      if (progress === 1) { this.travelTarget = null; this.callbacks.onTravelArrive?.(); }
+      const lift = this.palaceRoute ? 0 : Math.min(22, this.travelDuration);
+      this.camera.position.y += Math.sin(progress * Math.PI) * lift;
+      const tangent = this.travelTarget.clone().sub(this.travelOrigin);
+      tangent.y += Math.cos(progress * Math.PI) * lift * Math.PI;
+      this.controls.target.copy(travelGaze(this.worldPosition(), tangent, this.travelOriginLook, this.travelLook, progress, this.travelOrigin)).sub(this.worldOffset);
+      if (progress === 1) { this.travelTarget = null; if (this.palaceRoute?.points.length) this.advancePalaceRoute(); else { this.palaceRoute = null; this.callbacks.onTravelArrive?.(); } }
     } else if (!this.embodiment?.active) {
       if (this.cruising || this.movement.has('forward')) velocity.addScaledVector(forward, 30);
       if (this.movement.has('back')) velocity.addScaledVector(forward, -30);
@@ -349,7 +377,7 @@ export class Ocean {
     if (!this.embodiment?.active && global.distanceToSquared(this.worldPosition()) > 0) {
       const desired = this.worldPosition(); const safe = this.collisions.move(global, desired, { radius: 2 });
       const correction = safe.sub(desired); this.camera.position.add(correction); this.controls.target.add(correction);
-      if (this.travelTarget && correction.lengthSq() > 0.25) { this.travelTarget = null; this.callbacks.onError?.('前方有实体阻挡，已停下航行；可以上浮绕行，或在海图选择快速抵达。'); }
+      if (this.travelTarget && correction.lengthSq() > 0.25) { this.travelTarget = null; this.palaceRoute = null; this.callbacks.onError?.('前方有实体阻挡，已停下航行；可以上浮绕行，或在海图选择快速抵达。'); }
     }
     const arrived = this.worldPosition();
     const floor = seaHeight(arrived.x, arrived.z) + 5 - this.worldOffset.y;
@@ -365,8 +393,11 @@ export class Ocean {
     for (const entry of this.creationScene.objects.values()) entry.root.visible = entry.item.following || entry.followPosition.distanceTo(arrived) < 900;
     this.currentBiome = this.endless.update(this.worldPosition(), this.worldOffset, this.time);
     this.currentLandmark = localLandmark(arrived.toArray());
+    this.palace.update(arrived, this.worldOffset);
+    this.surface.update(arrived, this.worldOffset, this.time, this.reduced);
     this.landmarks.update(arrived, this.worldOffset, this.time, delta);
     this.wonders.collisions = this.collisions;
+    this.wonders.reduced = this.reduced; this.wonders.pixelRatio = this.renderer.getPixelRatio();
     this.wonders.update(arrived, this.worldOffset, this.time, delta);
     this.ecology.protectedActor = this.embodiment?.active;
     this.ecology.collisions = this.collisions;
@@ -556,6 +587,11 @@ export class Ocean {
     this.scene.fog.color.lerp(new THREE.Color(this.currentLandmark?.color || this.currentBiome?.color || '#21484c').lerp(new THREE.Color('#071d32'), night), transition);
     this.sky.position.copy(this.camera.position);
     this.sky.userData.snow?.position.copy(this.camera.position);
+    const surfaceBlend = this.surface.blend; this.uniforms.surface.value = surfaceBlend;
+    this.scene.fog.density *= 1 - surfaceBlend * 0.94;
+    this.scattering.uniforms.strength.value *= 1 - surfaceBlend;
+    this.sun.color.lerp(new THREE.Color('#ffd394'), surfaceBlend); this.sun.intensity = THREE.MathUtils.lerp(this.sun.intensity, 3.4, surfaceBlend);
+    if (this.sky.userData.snow) this.sky.userData.snow.visible = surfaceBlend < 0.95;
     if (this.flight && delta > 0) {
       const flight = this.flight;
       flight.elapsed += delta * this.speed;
@@ -564,7 +600,8 @@ export class Ocean {
       if (flight.path) this.camera.position.copy(flight.path.getPointAt(eased));
       else this.camera.position.lerpVectors(flight.origin, flight.destination, eased);
       this.camera.position.y += Math.sin(progress * Math.PI) * 3;
-      this.controls.target.lerpVectors(flight.originTarget, flight.target, eased);
+      const tangent = flight.path ? flight.path.getTangentAt(eased) : flight.destination.clone().sub(flight.origin);
+      this.controls.target.copy(travelGaze(this.camera.position, tangent, flight.originTarget, flight.target, progress, flight.origin));
       if (progress === 1) {
         this.location = flight.name;
         this.creatures[flight.creature].root.userData.mode = 'follow';
@@ -592,6 +629,7 @@ export class Ocean {
     const active = this.embodiment.active;
     const actors = [...this.creationScene.objects.values()].filter(entry => LIVING_ASSETS.includes(entry.item.asset) && !['shoal', 'jelly'].includes(entry.item.asset)).map(entry => ({ root: entry.root, shape: entry.shape, species: entry.item.asset, entry }));
     for (const animal of this.ecology.animals) actors.push({ root: animal.root, shape: animal.root, species: animal.kind });
+    for (const animal of this.surface.animals) actors.push({ root: animal.root, shape: animal.root, species: 'dolphin' });
     actors.push({ root: this.ecology.ancient.root, shape: this.ecology.ancient.root, species: 'ancient' });
     for (const [species, animal] of Object.entries(this.creatures)) actors.push({ root: animal.root, shape: animal.root, species });
     for (const entry of [...this.landmarks.entries, ...this.wonders.entries.values()]) entry.root.traverseVisible(root => {
@@ -599,7 +637,7 @@ export class Ocean {
     });
     if (active?.living && !actors.some(actor => actor.root === active.root)) actors.push(active);
     if (this.whaleFall.active && this.whaleFall.whale.root.visible) actors.push({ root: this.whaleFall.whale.root, species: 'whale', kinematic: true });
-    this.collisions.rebuild([this.city, this.creationScene.root, this.ecology.root, ...this.landmarks.entries.map(entry => entry.root), ...[...this.wonders.entries.values()].map(entry => entry.root), ...[...this.endless.chunks.values()].map(entry => entry.root)], this.worldOffset);
+    this.collisions.rebuild([this.city, this.palace.root, this.creationScene.root, this.ecology.root, ...this.landmarks.entries.map(entry => entry.root), ...[...this.wonders.entries.values()].map(entry => entry.root), ...[...this.endless.chunks.values()].map(entry => entry.root)], this.worldOffset);
     this.collisions.beginBodies(actors, this.worldOffset, active ? { ...active, position: this.embodiment.position, hull: this.embodiment.collisionHull } : null);
     for (const actor of actors) {
       if (actor.kinematic || active?.root === actor.root || active?.root === actor.shape) continue;
@@ -648,6 +686,6 @@ export class Ocean {
   }
 
   inspect() {
-    return { collisions: this.collisions.inspect(), whaleFall: this.whaleFall.inspect(), time: this.time, paused: this.paused, selected: this.selected, night: this.uniforms.night.value, flight: this.flight?.name || null, location: this.location, region: this.region, speed: this.speed, distances: { ...this.distances }, world: this.biomes?.inspect() || { region: 'city', events: {} }, ecology: this.ecology.inspect(), wonders: this.wonders.inspect(), creation: this.creationScene.inspect(), quality: this.quality, pixelRatio: this.renderer.getPixelRatio(), camera: this.camera.position.toArray(), creatures: Object.fromEntries(Object.entries(this.creatures).map(([key, value]) => [key, { position: value.root.position.toArray(), mode: value.root.userData.mode }])), drawCalls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, memory: { ...this.renderer.info.memory }, fps: this.lastFPS || null };
+    return { palace: this.palace.inspect(), surface: this.surface.inspect(), collisions: this.collisions.inspect(), whaleFall: this.whaleFall.inspect(), time: this.time, paused: this.paused, selected: this.selected, night: this.uniforms.night.value, flight: this.flight?.name || null, location: this.location, region: this.region, speed: this.speed, distances: { ...this.distances }, world: this.biomes?.inspect() || { region: 'city', events: {} }, ecology: this.ecology.inspect(), wonders: this.wonders.inspect(), creation: this.creationScene.inspect(), quality: this.quality, pixelRatio: this.renderer.getPixelRatio(), camera: this.camera.position.toArray(), creatures: Object.fromEntries(Object.entries(this.creatures).map(([key, value]) => [key, { position: value.root.position.toArray(), mode: value.root.userData.mode }])), drawCalls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, memory: { ...this.renderer.info.memory }, fps: this.lastFPS || null };
   }
 }

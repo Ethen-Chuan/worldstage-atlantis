@@ -6,6 +6,7 @@ import { LANDMARKS } from './landmarks.js';
 import { seaHeight } from './terrain.js';
 import { seededRandom } from './core.js';
 import { starOrbit } from './star-shoal.js';
+import { coralBloomEnvelope, createCoralBloom } from './coral-bloom.js';
 
 export function wonderEnvelope(elapsed) {
   if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= 14) return 0;
@@ -161,10 +162,10 @@ export function fanGeometry(radius, hue) {
 function prismGarden(materials) {
   const root = new THREE.Group(); const shop = new StoneWorkshop(materials, 953); const random = shop.random;
   const segments = []; const branches = []; const transform = new THREE.Object3D();
-  const timeUniform = { value: 0 }; const energyUniform = { value: 0 };
+  const timeUniform = { value: 0 }; const energyUniform = { value: 0 }; const burstAge = { value: -1 }; const emitters = [];
   const fanMaterial = new THREE.ShaderMaterial({
     side: THREE.DoubleSide, transparent: true, depthWrite: false, fog: true,
-    uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), gardenTime: timeUniform, gardenEnergy: energyUniform },
+    uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), gardenTime: timeUniform, gardenEnergy: energyUniform, burstAge },
     vertexShader: `attribute vec3 color; uniform float gardenTime; varying vec2 fanUV; varying vec3 fanPosition; varying vec3 fanColor;
       #include <fog_pars_vertex>
       void main() {
@@ -173,7 +174,7 @@ function prismGarden(materials) {
         vec4 mvPosition = modelViewMatrix * vec4(point, 1.0); gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
       }`,
-    fragmentShader: `uniform float gardenTime; uniform float gardenEnergy; varying vec2 fanUV; varying vec3 fanPosition; varying vec3 fanColor;
+    fragmentShader: `uniform float gardenTime; uniform float gardenEnergy; uniform float burstAge; varying vec2 fanUV; varying vec3 fanPosition; varying vec3 fanColor;
       #include <fog_pars_fragment>
       void main() {
         float veins = pow(0.5 + 0.5 * sin(fanUV.x * 226.0 + sin(fanUV.y * 18.0) * 2.5), 15.0);
@@ -182,6 +183,8 @@ function prismGarden(materials) {
         float edge = pow(fanUV.y, 11.0);
         float pulse = pow(0.5 + 0.5 * sin(length(fanPosition.xz) * 0.08 - gardenTime * 1.4), 6.0);
         vec3 radiance = fanColor * (0.36 + lattice * 0.45 + edge * 0.12 + gardenEnergy * pulse * (0.5 + lattice * 1.1));
+        float wave=exp(-pow((length(fanPosition.xz)-max(0.0,burstAge-2.4)*66.0)/12.0,2.0));
+        radiance+=fanColor*wave*gardenEnergy*2.2*(0.3+lattice+edge)*step(2.4,burstAge);
         gl_FragColor = vec4(radiance, 0.48 + lattice * 0.36 + edge * 0.12);
         #include <fog_fragment>
       }`,
@@ -192,6 +195,7 @@ function prismGarden(materials) {
     const depth = 38 - row * 35 + random() * 12;
     const radius = 12 + random() * 14 + row * 2;
     const base = row * 2.7;
+    emitters.push([horizontal, base + radius * 0.75, depth]);
     transform.position.set(horizontal, base + 1, depth); transform.rotation.set(-0.08, -0.3 + random() * 0.85, (random() - 0.5) * 0.4); transform.updateMatrix();
     const fan = fanGeometry(radius, ['#cb6b92', '#648bc5', '#d8975d', '#54c3b8'][index % 4]); fan.applyMatrix4(transform.matrix); segments.push(fan);
     for (let spoke = 0; spoke < 9; spoke++) {
@@ -211,7 +215,9 @@ function prismGarden(materials) {
   root.add(shop.finish('terraces-of-luminous-coral'));
   const sparks = sparkCloud(2200, ['#e89bab', '#66c8c0', '#e4c17c'], 1, 632); root.add(sparks.root);
   const manta = createManta(); manta.root.scale.setScalar(1.8); root.add(manta.root);
-  return { root, animate(time, delta, energy) {
+  const bloom = createCoralBloom(emitters); root.add(bloom.root);
+  return { root, animate(time, delta, energy, collisions, offset, age, reduced, ratio) {
+    burstAge.value = Number.isFinite(age) ? age : -1; bloom.update(age, reduced, ratio);
     timeUniform.value = time; energyUniform.value = energy; sparks.animate(time, energy);
     manta.root.position.set(Math.sin(time * 0.045) * 62, 48 + Math.sin(time * 0.16) * 4, -20);
     manta.root.rotation.set(0.08, -Math.PI / 2, Math.sin(time * 0.045) * 0.12);
@@ -298,8 +304,10 @@ export class WonderScene {
       entry.root.visible = distance < 850;
       if (!entry.root.visible) continue;
       entry.proximity = THREE.MathUtils.damp(entry.proximity, 1 - THREE.MathUtils.smoothstep(distance, 85, 250), 0.65, delta);
-      entry.energy = THREE.MathUtils.damp(entry.energy, Math.min(1, entry.proximity * 0.28 + wonderEnvelope(time - entry.pulseStart)), 2, delta);
-      entry.animate(time, delta, entry.energy, this.collisions, offset);
+      const age = time - entry.pulseStart;
+      const envelope = landmark.id === 'prism' ? coralBloomEnvelope(age) : wonderEnvelope(age);
+      entry.energy = THREE.MathUtils.damp(entry.energy, Math.min(1, entry.proximity * 0.28 + envelope), landmark.id === 'prism' ? 24 : 2, delta);
+      entry.animate(time, delta, entry.energy, this.collisions, offset, age, this.reduced, this.pixelRatio || 1);
     }
   }
 

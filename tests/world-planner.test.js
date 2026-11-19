@@ -40,10 +40,10 @@ test('director reports renderer failure without inventing an applied state', asy
   assert.equal(result.ok, false); assert.equal(director.inspect().events[0].status, 'failed');
 });
 
-test('all seven soundscapes are distinct, muted by default and narration is opt-in', () => {
+test('landmark soundscapes are distinct, muted by default and ambient narration is opt-in', () => {
   const sound = new OceanSound(); assert.equal(sound.enabled, false); assert.equal(sound.narration, false);
   const themes = LANDMARKS.map(site => { sound.setScene(site.id); return JSON.stringify(sound.theme()); });
-  assert.equal(new Set(themes).size, 7); assert.equal(sound.chant('测试'), false);
+  assert.equal(new Set(themes).size, LANDMARKS.length); assert.equal(sound.chant('测试'), false);
   sound.setIntensity(Infinity); assert.equal(sound.intensity, 1); sound.setIntensity(-4); assert.equal(sound.intensity, 0);
 });
 

@@ -1,7 +1,7 @@
 export class CreatureAudio {
   constructor(sound) {
     this.sound = sound; this.buffers = new Map(); this.loading = null; this.activeSong = null; this.activeWhale = null;
-    this.status = 'idle'; this.nextSong = 0; this.nextWhale = 8; this.lastSpatial = -1; this.missing = [];
+    this.status = 'idle'; this.nextSong = 28; this.nextWhale = 3; this.lastSpatial = -1; this.missing = [];
   }
 
   async prepare() {
@@ -24,13 +24,13 @@ export class CreatureAudio {
 
   play(name, distance, pan, duration, offset = 0) {
     const sound = this.sound; const context = sound.context; const buffer = this.buffers.get(name);
-    if (!buffer || !sound.enabled || context?.state !== 'running' || sound.paused) return null;
+    if (!buffer || !sound.enabled || sound.userMuted || context?.state !== 'running' || sound.paused) return null;
     const source = context.createBufferSource(); source.buffer = buffer;
     const envelope = context.createGain(); const gain = context.createGain(); const spatial = context.createStereoPanner(); const filter = context.createBiquadFilter();
     const now = context.currentTime; const length = Math.min(duration, buffer.duration - offset);
     envelope.gain.setValueAtTime(0, now); envelope.gain.linearRampToValueAtTime(1, now + 2);
     envelope.gain.setValueAtTime(1, now + Math.max(2, length - 4)); envelope.gain.linearRampToValueAtTime(0, now + length);
-    gain.gain.value = 0.82 / (1 + distance / 100);
+    gain.gain.value = (name === 'distant-whale' ? 1.45 : 0.82) / (1 + distance / 160);
     spatial.pan.value = Math.max(-0.85, Math.min(0.85, pan)); filter.type = 'lowpass'; filter.frequency.value = Math.max(900, 6500 - distance * 12);
     source.connect(filter).connect(envelope).connect(gain).connect(spatial).connect(sound.effectsGain); gain.connect(sound.reverb);
     sound.voices.add(source);
@@ -47,7 +47,8 @@ export class CreatureAudio {
   setSinging(actor, value) { if (actor) (actor.shape || actor.root).userData.singing = value; }
   restoreMusic() {
     const sound = this.sound;
-    if (sound.musicGain && sound.context) sound.musicGain.gain.setTargetAtTime(sound.levels.music * (this.activeSong ? 0.28 : sound.paused ? 0.65 : 1), sound.context.currentTime, 1.5);
+    const speaking = ['loading', 'speaking', 'device-voice'].includes(sound.gateEcho?.status);
+    if (sound.musicGain && sound.context) sound.musicGain.gain.setTargetAtTime(sound.levels.music * (speaking ? 0.3 : this.activeSong ? 0.28 : sound.paused ? 0.65 : 1), sound.context.currentTime, 1.5);
   }
 
   sing(actor, { force = false } = {}) {
@@ -66,7 +67,7 @@ export class CreatureAudio {
     if (this.activeSong || this.activeWhale || (!force && now < this.nextWhale)) return false;
     const voice = this.play('distant-whale', distance, pan, 22, 4);
     if (!voice) return false;
-    this.activeWhale = voice; this.nextWhale = now + 48; this.sound.onChange(); return true;
+    this.activeWhale = voice; this.nextWhale = now + 46; this.nextSong = Math.max(this.nextSong, now + 25); this.sound.onChange(); return true;
   }
 
   update(actors, { falling = false } = {}) {
@@ -74,13 +75,14 @@ export class CreatureAudio {
     if (!sound.unlocked || !sound.context) return;
     if (this.status === 'idle') void this.prepare();
     if (!sound.enabled || sound.paused || sound.context.state !== 'running') { if (this.activeSong || this.activeWhale) this.stop(); return; }
+    if (['loading', 'speaking', 'device-voice'].includes(sound.gateEcho?.status)) return;
     if (falling) return;
     const now = sound.context.currentTime;
     if (this.activeSong) {
       const actor = actors.find(actor => actor.root === this.activeSong.actor?.root);
       if (!actor || actor.distance > this.activeSong.maxDistance) { this.stopSong(); return; }
       if (now - this.lastSpatial >= 0.25) {
-        this.activeSong.gain.gain.setTargetAtTime(0.82 / (1 + actor.distance / 100), now, 1.5);
+        this.activeSong.gain.gain.setTargetAtTime(0.82 / (1 + actor.distance / 160), now, 1.5);
         this.activeSong.spatial.pan.setTargetAtTime(Math.max(-0.85, Math.min(0.85, actor.pan || 0)), now, 0.8); this.lastSpatial = now;
       }
     } else {
@@ -88,7 +90,7 @@ export class CreatureAudio {
       if (mermaid && now >= this.nextSong && !this.activeWhale) this.sing(mermaid);
       else if (now >= this.nextWhale) {
         const whale = actors.find(actor => actor.species === 'whale');
-        if (whale) this.whale({ distance: Math.max(100, whale.distance), pan: whale.pan });
+        this.whale({ distance: whale ? Math.max(100, whale.distance) : 240, pan: whale?.pan ?? Math.sin(now * 0.037) * 0.65 });
       }
     }
   }

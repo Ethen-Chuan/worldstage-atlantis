@@ -1,6 +1,7 @@
 import { Orchestra } from './orchestra.js';
 import { scoreFor } from './orchestra-score.js';
 import { CreatureAudio } from './creature-audio.js';
+import { GateEcho } from './gate-echo.js';
 
 export class OceanSound {
   constructor() {
@@ -10,6 +11,7 @@ export class OceanSound {
     this.master = null;
     this.voices = new Set();
     this.creatureAudio = new CreatureAudio(this);
+    this.gateEcho = new GateEcho(this);
     this.site = 'palace'; this.intensity = 0; this.narration = false; this.userMuted = false; this.unlocked = false; this.trial = false;
     this.levels = { music: 0.8, ambience: 0.22, effects: 0.65 }; this.onChange = () => {};
     try { this.userMuted = localStorage.getItem('worldstage-muted') === 'true'; } catch {}
@@ -124,7 +126,7 @@ export class OceanSound {
 
   inspect() {
     let peak = 0; if (this.analyser) { this.analyser.getFloatTimeDomainData(this.meter); for (const value of this.meter) peak = Math.max(peak, Math.abs(value)); }
-    return { enabled: this.enabled, unlocked: this.unlocked, userMuted: this.userMuted, context: this.context?.state || 'locked', site: this.site, intensity: this.intensity, narration: this.narration, paused: this.paused, levels: { ...this.levels }, peak: Number(peak.toFixed(5)), orchestra: this.orchestra?.inspect() || { status: 'idle' }, creatureAudio: this.creatureAudio.inspect() };
+    return { enabled: this.enabled, unlocked: this.unlocked, userMuted: this.userMuted, context: this.context?.state || 'locked', site: this.site, intensity: this.intensity, narration: this.narration, paused: this.paused, levels: { ...this.levels }, peak: Number(peak.toFixed(5)), orchestra: this.orchestra?.inspect() || { status: 'idle' }, gateEcho: this.gateEcho.status, creatureAudio: this.creatureAudio.inspect() };
   }
 
   note(midi, duration = 4, type = 'bell', volume = 0.05) {
@@ -154,17 +156,19 @@ export class OceanSound {
     return text ? this.chant(text) : true;
   }
 
-  chant(text) {
-    if (!this.enabled || !this.narration || !globalThis.speechSynthesis) return false;
-    const voice = speechSynthesis.getVoices().find(voice => voice.localService && /^zh/i.test(voice.lang));
+  chant(text, { explicit = false, cancelGate = true, onend = () => {} } = {}) {
+    if (!this.enabled || this.userMuted || this.paused || (!this.narration && !explicit) || !globalThis.speechSynthesis) return false;
+    const voices = speechSynthesis.getVoices().filter(voice => voice.localService && /^zh/i.test(voice.lang));
+    const voice = voices.find(voice => /Grandpa|Rocko|Reed|Li-mu|Yunxi/i.test(voice.name)) || voices[0];
     if (!voice) return false;
-    this.stopChant(); const utterance = new SpeechSynthesisUtterance(String(text).slice(0, 120)); utterance.voice = voice; utterance.lang = voice.lang; utterance.rate = 0.7; utterance.pitch = 0.45; utterance.volume = this.levels.effects;
+    if (cancelGate) this.stopChant(); else speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(String(text).slice(0, 160)); utterance.voice = voice; utterance.lang = voice.lang; utterance.rate = 0.7; utterance.pitch = 0.45; utterance.volume = this.levels.effects;
     utterance.onstart = () => this.musicGain.gain.setTargetAtTime(this.levels.music * 0.4, this.context.currentTime, 0.2);
-    const restore = () => this.musicGain.gain.setTargetAtTime(this.levels.music * (this.paused ? 0.65 : 1), this.context.currentTime, 0.7);
+    const restore = () => { this.creatureAudio.restoreMusic(); onend(); };
     utterance.onend = restore; utterance.onerror = restore; speechSynthesis.speak(utterance); return true;
   }
 
-  stopChant() { globalThis.speechSynthesis?.cancel(); if (this.musicGain && this.context) this.musicGain.gain.setTargetAtTime(this.levels.music * (this.paused ? 0.65 : 1), this.context.currentTime, 0.7); }
+  stopChant() { this.gateEcho.stop(); globalThis.speechSynthesis?.cancel(); if (this.musicGain && this.context) this.musicGain.gain.setTargetAtTime(this.levels.music * (this.paused ? 0.65 : 1), this.context.currentTime, 0.7); }
 
   voice(creature, singing = false) {
     if (!this.enabled || !this.context) return;

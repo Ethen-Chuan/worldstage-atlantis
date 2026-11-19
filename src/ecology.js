@@ -225,7 +225,7 @@ export class OceanEcology {
     this.foodWeb = new FoodWeb(); this.protectedActor = null;
     this.ancient = createAncientFish(); this.ancient.root.scale.setScalar(1.85); this.ancient.root.rotation.y = -Math.PI / 2; this.root.add(this.ancient.root);
     this.animals = [];
-    for (let index = 0; index < 3; index++) this.animals.push({ ...createShark(), kind: 'shark', index });
+    for (let index = 0; index < 3; index++) this.animals.push({ ...createShark({ hammerhead: index === 2 }), kind: 'shark', index });
     for (let index = 0; index < 4; index++) this.animals.push({ ...createTurtle(), kind: 'turtle', index });
     for (let index = 0; index < 6; index++) this.animals.push({ ...createNautilus(), kind: 'nautilus', index });
     this.animals.push({ ...createMermaid(), kind: 'mermaid', index: 0 });
@@ -244,6 +244,7 @@ export class OceanEcology {
     if (cell !== this.cell) {
       this.cell = cell;
       this.anchor = landmark?.id === 'palace' ? [0, 0, 0] : landmark ? [landmark.center[0], seaHeight(landmark.center[0], landmark.center[2]), landmark.center[2] - 45] : [(Math.floor(position.x / CELL) + 0.5) * CELL, seaHeight(position.x, position.z), (Math.floor(position.z / CELL) + 0.5) * CELL - 65];
+      if (landmark?.kind === 'castle') this.anchor[0] += 225;
     }
     this.activeHabitat = landmark?.id || biomeAt(position.x, position.z).id;
     const anchors = habitatAnchors(position.toArray()); const key = anchors.map(anchor => anchor.key).sort().join('|');

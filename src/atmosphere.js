@@ -44,9 +44,9 @@ class ScatteringPass extends Pass {
 export function buildAtmosphere(scene, uniforms) {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(1200, 48, 32), new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false,
-    uniforms: { night: uniforms.night, time: uniforms.time, skyTop: uniforms.skyTop, skyBottom: uniforms.skyBottom, skySun: uniforms.skySun },
+    uniforms: { night: uniforms.night, time: uniforms.time, skyTop: uniforms.skyTop, skyBottom: uniforms.skyBottom, skySun: uniforms.skySun, surface: uniforms.surface },
     vertexShader: 'varying vec3 direction; void main(){ direction = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `varying vec3 direction; uniform float night; uniform float time; uniform vec3 skyTop; uniform vec3 skyBottom; uniform float skySun;
+    fragmentShader: `varying vec3 direction; uniform float night; uniform float time; uniform vec3 skyTop; uniform vec3 skyBottom; uniform float skySun; uniform float surface;
       void main(){
         vec3 dir = normalize(direction);
         float upper = smoothstep(-0.18, 0.8, dir.y);
@@ -59,6 +59,11 @@ export function buildAtmosphere(scene, uniforms) {
         color += (sun * vec3(0.34,0.37,0.24) + center * vec3(0.72,0.68,0.40)) * skySun;
         color += water * 0.018 * pow(max(dir.y, 0.0), 1.5);
         color *= mix(vec3(1.0), vec3(0.17,0.25,0.42), night);
+        vec3 sunset=mix(vec3(0.87,0.36,0.13),vec3(0.11,0.24,0.38),smoothstep(0.0,0.55,dir.y));
+        float solar=dot(dir,normalize(vec3(-0.12,0.065,-1.0)));
+        sunset+=vec3(1.0,0.65,0.23)*pow(max(0.0,solar),25.0)*0.55;
+        sunset+=vec3(2.6,1.9,0.7)*smoothstep(0.99925,0.9994,solar);
+        color=mix(color,sunset,surface);
         gl_FragColor = vec4(color, 1.0);
       }`,
   }));

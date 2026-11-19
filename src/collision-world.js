@@ -47,6 +47,7 @@ export function actorHull(actor) {
   const origin = actor.root.getWorldPosition(new THREE.Vector3());
   const scale = shape.getWorldScale(new THREE.Vector3());
   let profile = PROFILES[actor.species];
+  if (actor.species === 'shark' && shape.userData.speciesVariant === 'hammerhead') profile = [...profile, [-2, 0, -5, 1], [2, 0, -5, 1]];
   if (!profile) {
     if (!shape.userData.collisionProfile) {
       const inverse = shape.matrixWorld.clone().invert(); const bounds = new THREE.Box3();
@@ -226,23 +227,27 @@ export class CollisionWorld {
       for (let attempt = 0; attempt < 120 && this.penetration(start, body.hull, actor.root) > 0; attempt++) start.y += 2;
     }
     const direction = desired.clone().sub(start);
-    const maxSpeed = actor.species === 'whale' ? 22 : actor.species === 'shark' ? 18 : 11;
+    const maxSpeed = actor.species === 'dolphin' ? 27 : actor.species === 'whale' ? 22 : actor.species === 'shark' ? 18 : 11;
     let avoidance = previous?.avoidance || new THREE.Vector3(); let probeDelay = (previous?.probeDelay || 0) - delta;
+    const smoothedAvoidance = previous?.smoothedAvoidance?.clone() || new THREE.Vector3();
+    let tangentSign = previous?.tangentSign || 0;
     if (!relocated && direction.lengthSq() > 0.0001) {
       if (probeDelay <= 0) {
         const ahead = start.clone().addScaledVector(direction.clone().normalize(), Math.min(direction.length() + 8, body.extent * 0.7 + 8));
         avoidance = this.move(start, ahead, { hull: body.hull, ignore: actor.root }).sub(ahead); probeDelay = 0.15;
       }
-      if (avoidance.lengthSq() > 0.05) {
-        const normal = avoidance.clone().normalize(); const tangent = new THREE.Vector3(-normal.z, 0, normal.x);
-        if (tangent.dot(direction) < 0) tangent.negate();
+      smoothedAvoidance.lerp(avoidance, 1 - Math.exp(-delta * 7));
+      if (smoothedAvoidance.lengthSq() > 0.05) {
+        const normal = smoothedAvoidance.clone().normalize(); const tangent = new THREE.Vector3(-normal.z, 0, normal.x);
+        if (!tangentSign) tangentSign = tangent.dot(direction) < 0 ? -1 : 1;
+        tangent.multiplyScalar(tangentSign);
         direction.addScaledVector(normal, Math.max(4, direction.length() * 0.8)).addScaledVector(tangent, 6);
-      }
+      } else tangentSign = 0;
       direction.clampLength(0, maxSpeed * delta);
     } else direction.set(0, 0, 0);
     const corrected = this.move(start, start.clone().add(direction), { hull: body.hull, previousHull: relocated ? body.hull : previous.hull, ignore: actor.root });
     actor.root.parent.updateWorldMatrix(true, false); actor.root.position.copy(actor.root.parent.worldToLocal(corrected.clone().sub(offset)));
-    body.position.copy(corrected); this.previous.set(actor.root, { position: corrected.clone(), desired, hull: body.hull, avoidance, probeDelay });
+    body.position.copy(corrected); this.previous.set(actor.root, { position: corrected.clone(), desired, hull: body.hull, avoidance, smoothedAvoidance, tangentSign, probeDelay });
     return corrected;
   }
 
