@@ -5,8 +5,10 @@ import { createWhale, createManta } from './creatures.js';
 import { LANDMARKS } from './landmarks.js';
 import { seaHeight } from './terrain.js';
 import { seededRandom } from './core.js';
-import { starOrbit } from './star-shoal.js';
+import { starOrbit, StarWake, starWakeStage } from './star-shoal.js';
+import { createStarRadiance } from './star-radiance.js';
 import { coralBloomEnvelope, createCoralBloom } from './coral-bloom.js';
+import { createCoralRadiance } from './coral-radiance.js';
 
 export function wonderEnvelope(elapsed) {
   if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= 14) return 0;
@@ -86,7 +88,7 @@ function fishVortex(materials) {
   const gold = new THREE.Color('#edc36e'); const blue = new THREE.Color('#53b7c9');
   paths.forEach((item, index) => fish.setColorAt(index, gold.clone().lerp(blue, item.layer > 0.58 ? 0.85 : item.layer * 0.45)));
   root.add(fish);
-  const sparks = sparkCloud(1300, ['#b1c9b9', '#85b4b2', '#a0bac5'], 0, 861); root.add(sparks.root);
+  const starlight = createStarRadiance(paths); root.add(starlight.root); const wake = new StarWake();
   const whale = createWhale(); whale.root.scale.setScalar(1.8); root.add(whale.root);
   const armillary = new THREE.Group(); armillary.position.y = 75; root.add(armillary);
   const bronze = new THREE.MeshStandardMaterial({ color: '#a78e5c', metalness: 0.72, roughness: 0.42 });
@@ -114,23 +116,26 @@ function fishVortex(materials) {
   }
   root.add(ruin.finish('drowned-observatory'));
   const transform = new THREE.Object3D(); const direction = new THREE.Vector3(); const axis = new THREE.Vector3(0, 0, -1);
-  return { root, animate(time, delta, energy, collisions, offset) {
+  const worldMatrix = new THREE.Matrix4(); const localMatrix = new THREE.Matrix4(); const point = []; const next = [];
+  return { root, inspect: () => wake.inspect(), animate(time, delta, energy, collisions, offset, age, reduced, pixelRatio) {
+    wake.update(delta, age, reduced);
     root.updateWorldMatrix(true, false);
-    const worldMatrix = root.matrixWorld.clone();
+    worldMatrix.copy(root.matrixWorld);
     if (offset) { worldMatrix.elements[12] += offset.x; worldMatrix.elements[13] += offset.y; worldMatrix.elements[14] += offset.z; }
-    const localMatrix = worldMatrix.clone().invert();
+    localMatrix.copy(worldMatrix).invert();
     paths.forEach((item, index) => {
-      transform.position.fromArray(starOrbit(time, item, energy));
-      direction.fromArray(starOrbit(time + 0.03, item, energy)).sub(transform.position).normalize();
-      if (collisions) transform.position.copy(collisions.avoidSmall(transform.position.clone().applyMatrix4(worldMatrix), item.scale)).applyMatrix4(localMatrix);
+      transform.position.fromArray(starOrbit(time, item, wake.radiance, wake.clock, wake.gather, point));
+      direction.fromArray(starOrbit(time + 0.03, item, wake.radiance, wake.clock + 0.03 * wake.speed, wake.gather, next)).sub(transform.position).normalize();
+      if (collisions) transform.position.copy(collisions.avoidSmall(transform.position.applyMatrix4(worldMatrix), item.scale)).applyMatrix4(localMatrix);
+      transform.position.toArray(starlight.positions, index * 3);
       transform.quaternion.setFromUnitVectors(axis, direction);
       transform.scale.setScalar(item.scale * (1 + energy * 0.1)); transform.updateMatrix(); fish.setMatrixAt(index, transform.matrix);
     });
     fish.instanceMatrix.needsUpdate = true;
-    material.emissiveIntensity = 0.3 + energy * 0.7;
-    sparks.animate(time, energy);
+    material.emissiveIntensity = 0.3 + wake.radiance * 2.5;
+    starlight.update(time, delta, wake, reduced, pixelRatio);
     bands.forEach((band, index) => { band.rotation.z = index * 1.4 + Math.sin(time * 0.035 + index) * 0.08; band.rotation.y = (index === 2 ? -0.55 : 0.16) + Math.sin(time * 0.045 + index) * 0.045 + energy * 0.045; });
-    inlay.emissiveIntensity = 0.3 + energy * 0.85;
+    inlay.emissiveIntensity = 0.3 + wake.radiance * 3;
     whale.root.position.set(Math.sin(time * 0.035) * 19, 72 + Math.sin(time * 0.12) * 2.5, -10);
     whale.root.rotation.set(-0.08, -Math.PI / 2 + Math.sin(time * 0.035) * 0.1, -0.12);
     if (delta > 0) whale.animate(time * 0.8, delta);
@@ -162,10 +167,10 @@ export function fanGeometry(radius, hue) {
 function prismGarden(materials) {
   const root = new THREE.Group(); const shop = new StoneWorkshop(materials, 953); const random = shop.random;
   const segments = []; const branches = []; const transform = new THREE.Object3D();
-  const timeUniform = { value: 0 }; const energyUniform = { value: 0 }; const burstAge = { value: -1 }; const emitters = [];
+  const timeUniform = { value: 0 }; const energyUniform = { value: 0 }; const burstAge = { value: -1 }; const emitters = []; const glowAnchors = []; const reducedUniform = { value: 0 };
   const fanMaterial = new THREE.ShaderMaterial({
     side: THREE.DoubleSide, transparent: true, depthWrite: false, fog: true,
-    uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), gardenTime: timeUniform, gardenEnergy: energyUniform, burstAge },
+    uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), gardenTime: timeUniform, gardenEnergy: energyUniform, burstAge, gardenReduced: reducedUniform },
     vertexShader: `attribute vec3 color; uniform float gardenTime; varying vec2 fanUV; varying vec3 fanPosition; varying vec3 fanColor;
       #include <fog_pars_vertex>
       void main() {
@@ -174,7 +179,7 @@ function prismGarden(materials) {
         vec4 mvPosition = modelViewMatrix * vec4(point, 1.0); gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
       }`,
-    fragmentShader: `uniform float gardenTime; uniform float gardenEnergy; uniform float burstAge; varying vec2 fanUV; varying vec3 fanPosition; varying vec3 fanColor;
+    fragmentShader: `uniform float gardenTime; uniform float gardenEnergy; uniform float burstAge; uniform float gardenReduced; varying vec2 fanUV; varying vec3 fanPosition; varying vec3 fanColor;
       #include <fog_pars_fragment>
       void main() {
         float veins = pow(0.5 + 0.5 * sin(fanUV.x * 226.0 + sin(fanUV.y * 18.0) * 2.5), 15.0);
@@ -182,9 +187,10 @@ function prismGarden(materials) {
         float lattice = max(veins, crossVeins * 0.55);
         float edge = pow(fanUV.y, 11.0);
         float pulse = pow(0.5 + 0.5 * sin(length(fanPosition.xz) * 0.08 - gardenTime * 1.4), 6.0);
-        vec3 radiance = fanColor * (0.36 + lattice * 0.45 + edge * 0.12 + gardenEnergy * pulse * (0.5 + lattice * 1.1));
+        float livingLight=mix(pow(0.5+0.5*sin(fanUV.y*10.0-gardenTime*0.8+fanPosition.x*0.03),4.0),0.45,gardenReduced);
+        vec3 radiance = fanColor * (0.26 + lattice * 0.56 + edge * 0.75 + livingLight*lattice*0.9 + gardenEnergy * pulse * (0.5 + lattice * 1.7));
         float wave=exp(-pow((length(fanPosition.xz)-max(0.0,burstAge-2.4)*66.0)/12.0,2.0));
-        radiance+=fanColor*wave*gardenEnergy*2.2*(0.3+lattice+edge)*step(2.4,burstAge);
+        radiance+=fanColor*wave*gardenEnergy*3.2*(0.3+lattice+edge)*step(2.4,burstAge)*mix(1.0,0.4,gardenReduced);
         gl_FragColor = vec4(radiance, 0.48 + lattice * 0.36 + edge * 0.12);
         #include <fog_fragment>
       }`,
@@ -198,6 +204,14 @@ function prismGarden(materials) {
     emitters.push([horizontal, base + radius * 0.75, depth]);
     transform.position.set(horizontal, base + 1, depth); transform.rotation.set(-0.08, -0.3 + random() * 0.85, (random() - 0.5) * 0.4); transform.updateMatrix();
     const fan = fanGeometry(radius, ['#cb6b92', '#648bc5', '#d8975d', '#54c3b8'][index % 4]); fan.applyMatrix4(transform.matrix); segments.push(fan);
+    const points = fan.attributes.position; const tint = ['#ffb6db', '#99c5ff', '#ffe0a1', '#78ffdd'][index % 4];
+    for (let knot = 0; knot < 32; knot++) {
+      const radial = knot % 4 === 0 ? 11 : knot % 4 === 1 ? 14 : 16;
+      const angular = 2 + (knot * 11) % 33; const pointIndex = radial * 37 + angular;
+      const position = [points.getX(pointIndex), points.getY(pointIndex), points.getZ(pointIndex)];
+      glowAnchors.push({ position, progress: radial / 16, phase: index * 2.399 + knot * 1.7, halo: false, size: 1, color: tint });
+      if (knot % 8 === 0) glowAnchors.push({ position, progress: radial / 16, phase: index * 2.399 + knot * 1.7, halo: true, size: 15 + radius * 0.3, color: tint });
+    }
     for (let spoke = 0; spoke < 9; spoke++) {
       const angle = (spoke / 8 - 0.5) * 2.6;
       const points = Array.from({ length: 9 }, (_, step) => {
@@ -216,8 +230,10 @@ function prismGarden(materials) {
   const sparks = sparkCloud(2200, ['#e89bab', '#66c8c0', '#e4c17c'], 1, 632); root.add(sparks.root);
   const manta = createManta(); manta.root.scale.setScalar(1.8); root.add(manta.root);
   const bloom = createCoralBloom(emitters); root.add(bloom.root);
+  const radiance = createCoralRadiance(glowAnchors); root.add(radiance.root);
   return { root, animate(time, delta, energy, collisions, offset, age, reduced, ratio) {
     burstAge.value = Number.isFinite(age) ? age : -1; bloom.update(age, reduced, ratio);
+    radiance.update(time, energy, age, reduced, ratio); reducedUniform.value = reduced ? 1 : 0;
     timeUniform.value = time; energyUniform.value = energy; sparks.animate(time, energy);
     manta.root.position.set(Math.sin(time * 0.045) * 62, 48 + Math.sin(time * 0.16) * 4, -20);
     manta.root.rotation.set(0.08, -Math.PI / 2, Math.sin(time * 0.045) * 0.12);
@@ -288,7 +304,7 @@ export class WonderScene {
     if (distance > landmark.radius + 35) return { ok: false, message: `还没有靠近${landmark.name}。先说“前往${landmark.name}”，到达后再唤醒。` };
     const entry = this.entries.get(id) || this.build(landmark);
     entry.pulseStart = kind === 'calm' ? -Infinity : this.time;
-    return { ok: true, message: kind === 'calm' ? '奇观回到平缓的自然律动。' : `${landmark.name}正在回应你。`, detail: kind === 'calm' ? '只结束这次唤醒 · 环境生命仍在运动' : '本地三维奇观编排 · 约 14 秒后自然回落 · 可暂停或说“让奇观平静下来”' };
+    return { ok: true, message: kind === 'calm' ? '奇观回到平缓的自然律动。' : `${landmark.name}正在回应你。`, detail: kind === 'calm' ? '只结束这次唤醒 · 环境生命仍在运动' : `本地三维奇观编排 · 约 ${id === 'vortex' ? 18 : 14} 秒后自然回落 · 可暂停或说“让奇观平静下来”` };
   }
 
   resetPulses() { for (const entry of this.entries.values()) entry.pulseStart = -Infinity; }
@@ -305,11 +321,11 @@ export class WonderScene {
       if (!entry.root.visible) continue;
       entry.proximity = THREE.MathUtils.damp(entry.proximity, 1 - THREE.MathUtils.smoothstep(distance, 85, 250), 0.65, delta);
       const age = time - entry.pulseStart;
-      const envelope = landmark.id === 'prism' ? coralBloomEnvelope(age) : wonderEnvelope(age);
+      const envelope = landmark.id === 'prism' ? coralBloomEnvelope(age) : landmark.id === 'vortex' ? starWakeStage(age).strength : wonderEnvelope(age);
       entry.energy = THREE.MathUtils.damp(entry.energy, Math.min(1, entry.proximity * 0.28 + envelope), landmark.id === 'prism' ? 24 : 2, delta);
       entry.animate(time, delta, entry.energy, this.collisions, offset, age, this.reduced, this.pixelRatio || 1);
     }
   }
 
-  inspect() { return [...this.entries].map(([id, entry]) => ({ id, visible: entry.root.visible, energy: Number(entry.energy.toFixed(3)), awakened: wonderEnvelope(this.time - entry.pulseStart) > 0, position: entry.root.position.toArray() })); }
+  inspect() { return [...this.entries].map(([id, entry]) => ({ id, visible: entry.root.visible, energy: Number(entry.energy.toFixed(3)), awakened: (id === 'vortex' ? starWakeStage(this.time - entry.pulseStart).strength : wonderEnvelope(this.time - entry.pulseStart)) > 0, position: entry.root.position.toArray(), ...entry.inspect?.() })); }
 }

@@ -1,14 +1,15 @@
 {
   "name": "worldstage-3d",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "private": true,
   "type": "module",
   "engines": {
     "node": "24.x"
   },
   "scripts": {
-    "audio:prepare": "node scripts/prepare-orchestra.mjs && node scripts/prepare-voices.js",
+    "audio:prepare": "node scripts/prepare-orchestra.mjs && node scripts/prepare-voices.js && node scripts/prepare-gate-voice.mjs",
     "audio:voices": "node scripts/prepare-voices.js",
+    "audio:gate": "node scripts/prepare-gate-voice.mjs",
     "predev": "node scripts/check-audio.mjs",
     "prebuild": "node scripts/check-audio.mjs",
     "prebuild:public": "node scripts/check-audio.mjs",

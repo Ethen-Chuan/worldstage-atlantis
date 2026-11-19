@@ -6,13 +6,14 @@ import { createTurtle } from './mythic-creatures.js';
 import { seaHeight } from './terrain.js';
 import { seededRandom } from './core.js';
 import { planWorld } from './world-planner.js';
+import { starWakeStage, STAR_WAKE_DURATION } from './star-shoal.js';
 
 export const SITE_PLAY = Object.freeze({
   palace: { name: '圣城巡礼', invitation: '触动石阶上的微光', instruction: '依次穿过五道金环，让沉睡的城重新回应。', mode: 'route', colors: ['#8dbba9', '#a9cfc1', '#bfbc8e'] },
   gate: { name: '回声寻径', invitation: '让古老刻纹回应', instruction: '循着逐次亮起的光环，驾驭生物把回声带过天门。', mode: 'route', colors: ['#98bdb7', '#b6c8b2', '#93b6c1'] },
   garden: { name: '鲸落授光', invitation: '唤起鲸骨旁的生命', instruction: '自由寻找五枚光种，将它们送回沉眠的花园。', mode: 'collect', colors: ['#91b8a4', '#a4c5b8', '#b2b58d'] },
   choir: { name: '星潮合奏', invitation: '让水母沿海流舒展', instruction: '依次点亮音符，每一道环都会加入一层回声。', mode: 'route', colors: ['#a7badc', '#9fbbc4', '#b8cab4'] },
-  vortex: { name: '穿越星瞳', invitation: '让鱼群展开再汇聚', instruction: '驾驭生物沿着鱼群的轨迹穿环，让它们向外舒展。', mode: 'route', colors: ['#a7c5be', '#83b8b1', '#b8bd9b'] },
+  vortex: { name: '穿越星瞳', invitation: '唤醒星瞳 · 让群星奔涌', instruction: '驾驭生物沿着鱼群的轨迹穿环，让它们向外舒展。', mode: 'route', colors: ['#a7c5be', '#83b8b1', '#b8bd9b'] },
   prism: { name: '珊瑚播光', invitation: '轻触珊瑚，让光传开', instruction: '按任意顺序收集五枚光种，让光回到珊瑚枝脉。', mode: 'collect', colors: ['#9bcac0', '#97bcb8', '#b5ba93'] },
   vents: { name: '潮汐共振', invitation: '观察热泉的流动', instruction: '观察光环的呼吸，在金色明亮的时刻穿过。', mode: 'rhythm', colors: ['#b1b99c', '#91b9b4', '#b1bdc0'] },
 });
@@ -102,7 +103,7 @@ export class TidePlay {
     if (Math.hypot(position.x - landmark.center[0], position.z - landmark.center[2]) > landmark.radius + 50) return false;
     this.show = { id, start: this.ocean.time, ending: null };
     SITE_PLAY[id].colors.forEach((color, index) => this.festival.material.uniforms[['tintA', 'tintB', 'tintC'][index]].value.set(color));
-    this.festival.visible = id !== 'prism'; if (!quiet && id === 'gate') this.sound.ritual(id); this.ocean.wonders.activate(id, position); this.ocean.landmarks.respond(id, this.ocean.time);
+    this.festival.visible = !['prism', 'vortex'].includes(id); if (!quiet && id === 'gate') this.sound.ritual(id); this.ocean.wonders.activate(id, position); this.ocean.landmarks.respond(id, this.ocean.time);
     this.ocean.callbacks.onCeremony?.();
     return true;
   }
@@ -155,8 +156,8 @@ export class TidePlay {
       this.festival.material.uniforms.age.value = age; this.festival.material.uniforms.strength.value = (ocean.reduced ? 0.45 : 1) * fade;
       this.festival.material.uniforms.ratio.value = ocean.renderer.getPixelRatio();
       this.festival.position.set(landmark.center[0], seaHeight(landmark.center[0], landmark.center[2]), landmark.center[2]).sub(ocean.worldOffset);
-      this.sound.setIntensity(festivalStage(age).strength * fade);
-      if (age >= 36 || fade <= 0) { this.show = null; this.festival.visible = false; this.sound.setIntensity(0); }
+      this.sound.setIntensity((this.show.id === 'vortex' ? starWakeStage(age) : festivalStage(age)).strength * fade);
+      if (age >= (this.show.id === 'vortex' ? STAR_WAKE_DURATION : 36) || fade <= 0) { this.show = null; this.festival.visible = false; this.sound.setIntensity(0); }
     }
     const trial = this.trial; if (!trial) return;
     trial.group.position.copy(ocean.worldOffset).multiplyScalar(-1);
@@ -185,5 +186,5 @@ export class TidePlay {
     trial.targets.forEach(target => { if (target.collected) { target.ring.material.opacity = THREE.MathUtils.damp(target.ring.material.opacity, 0, 1.3, delta); target.ring.scale.lerp(new THREE.Vector3(1.25, 1.25, 1.25), 1 - Math.exp(-delta)); target.ring.visible = target.ring.material.opacity > 0.005; } });
   }
 
-  inspect() { return { show: this.show ? { id: this.show.id, elapsed: this.ocean.time - this.show.start, ...festivalStage(this.ocean.time - this.show.start) } : null, trial: this.trial ? { id: this.trial.id, progress: this.trial.progress, elapsed: this.trial.elapsed, finished: this.trial.finished, feedback: this.trial.feedback, next: this.trial.targets.find(target => !target.collected)?.point.toArray() || null } : null }; }
+  inspect() { return { show: this.show ? { id: this.show.id, elapsed: this.ocean.time - this.show.start, ...(this.show.id === 'vortex' ? starWakeStage(this.ocean.time - this.show.start) : festivalStage(this.ocean.time - this.show.start)) } : null, trial: this.trial ? { id: this.trial.id, progress: this.trial.progress, elapsed: this.trial.elapsed, finished: this.trial.finished, feedback: this.trial.feedback, next: this.trial.targets.find(target => !target.collected)?.point.toArray() || null } : null }; }
 }

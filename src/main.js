@@ -67,6 +67,7 @@ document.querySelector('#app').innerHTML = `
   </main>`;
 
 const elements = Object.fromEntries([...document.querySelectorAll('[id]')].map(element => [element.id, element]));
+document.querySelector('.edition small').textContent = '0.10.1 · GRC';
 let state = initialCreation();
 let journeyState = initialState();
 let ocean;
@@ -506,14 +507,16 @@ async function renderWorldAction({ kind, args }) {
     }
     panel('tools', false); wakeWorld(); ocean.play.awaken(args.site);
     const response = args.summon ? `潮汐记得你的呼唤。${args.summon}，从旧日之海归来。` : args.echo ? `深海记住了你的呼唤。${args.echo}，愿回声将你唤回。` : `${site.name}，听见了你的声音。`;
-    elements['response-line'].textContent = response; elements['action-label'].textContent = '光沿着海流与枝脉展开';
+    elements['response-line'].textContent = response; elements['action-label'].textContent = args.site === 'vortex' ? '万鱼收束 → 星环奔涌 → 群星交辉 · 18 秒连续演变' : '光沿着海流与枝脉展开';
     if (args.site === 'gate') {
-      elements['action-label'].textContent = sound.userMuted ? '当前静音 · 开启配乐后再次呼唤' : '天门正在酝酿回声 · 文字只交给本机语音，不发送云端';
-      await sound.activateFromGesture(); sound.creatureAudio.stop();
-      const pending = sound.gateEcho.speak(response); const voiceRevision = sound.gateEcho.revision;
+      elements['action-label'].textContent = sound.userMuted ? '当前静音 · 开启配乐后再次呼唤' : 'GRC 声音版 · 古希腊语回声加载中 · 不使用中文朗读';
+      await sound.activateFromGesture({ waitForMusic: false }); sound.creatureAudio.stop();
+      const pending = sound.gateEcho.speak(args.summon || args.echo || 'gate'); const voiceRevision = sound.gateEcho.revision;
+      const invocation = sound.gateEcho.invocation;
+      if (invocation) elements['response-line'].textContent = `${invocation.ancient}  ·  ${invocation.meaning}`;
       const spoken = await pending;
       if (voiceRevision !== sound.gateEcho.revision) return;
-      elements['action-label'].textContent = spoken ? sound.gateEcho.status === 'device-voice' ? '设备语音回应 · 当前设备未提供深声混响' : '天门深声回响 · 本机合成、低频与延迟混响 · 非古语翻译' : sound.userMuted ? '当前静音 · 开启配乐后再次呼唤' : '本机语音不可用 · 请检查设备中文语音包后重试';
+      elements['action-label'].textContent = spoken ? 'GRC 声音版 · 古希腊语男声 · 合成近似发音 · 中文仅为字幕' : sound.userMuted ? '当前静音 · 开启配乐后再次呼唤' : '古希腊语音色未就绪 · 请运行 npm run audio:gate · 不使用中文朗读替代';
     }
     recentResult = null; document.body.classList.add('has-interacted');
   }

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { GateEcho } from '../src/gate-echo.js';
 import { gateText, hasAudiblePCM } from '../gate-voice.js';
 import { planWorld, validateWorldPlan } from '../src/world-planner.js';
+import { gateInvocation, GATE_LINES } from '../src/gate-language.js';
+import { OceanSound } from '../src/sound.js';
 
 function fixture() {
   const parameter = () => ({ value: 0, setTargetAtTime() {} });
@@ -25,22 +27,49 @@ test('empty or silent WAV files cannot masquerade as successful speech', () => {
   assert.equal(hasAudiblePCM(audio), false); audio.writeInt16LE(3200, 400); assert.equal(hasAudiblePCM(audio), true);
 });
 
-test('decoded echo is audible, pitch-shifted and fully disconnected when stopped', async () => {
+test('ancient Greek male recording is routed, cached and fully disconnected when stopped', async () => {
   const { sound, echo } = fixture(); const original = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'audio/wav' }, async arrayBuffer() { return new ArrayBuffer(1); } });
-  try { assert.equal(await echo.speak('古城'), true); assert.equal(echo.status, 'speaking'); assert.equal(echo.source.playbackRate.value, 0.86); const nodes = [...echo.nodes]; echo.stop(); assert.ok(nodes.every(node => node.disconnected)); sound.userMuted = true; assert.equal(await echo.speak('古城'), false); }
+  let requests = 0;
+  globalThis.fetch = async (url, options) => { requests++; assert.equal(url, './audio/gate/grc-answer.mp3'); assert.equal(options.body, undefined); return { ok: true, headers: { get: () => 'audio/mpeg' }, async arrayBuffer() { return new ArrayBuffer(1); } }; };
+  try { assert.equal(await echo.speak('古城'), true); assert.equal(echo.status, 'speaking'); assert.equal(echo.source.playbackRate.value, 1); const nodes = [...echo.nodes]; echo.stop(); assert.ok(nodes.every(node => node.disconnected)); await echo.speak('古城'); assert.equal(requests, 1); sound.userMuted = true; assert.equal(await echo.speak('古城'), false); }
   finally { echo.stop(); globalThis.fetch = original; }
 });
 
-test('device fallback releases its speaking state and stale requests cannot speak later', async () => {
+test('missing ancient Greek audio never falls back to Chinese speech; stale requests cannot speak', async () => {
   const { sound, echo } = fixture(); const original = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: false }); let finish;
-  sound.chant = (text, options) => { assert.equal(options.cancelGate, false); finish = options.onend; return true; };
+  globalThis.fetch = async () => ({ ok: false });
+  sound.chant = () => { assert.fail('Chinese device speech is forbidden for the gate'); };
   try {
-    assert.equal(await echo.speak('古城'), true); assert.equal(echo.status, 'device-voice'); finish(); assert.equal(echo.status, 'idle');
+    assert.equal(await echo.speak('古城'), false); assert.equal(echo.status, 'unavailable');
     let resolve; globalThis.fetch = () => new Promise(done => { resolve = done; });
     const pending = echo.speak('旧的请求'); echo.stop(); resolve({ ok: false }); assert.equal(await pending, false); assert.equal(echo.status, 'idle');
   } finally { echo.stop(); globalThis.fetch = original; }
+});
+
+test('semantic invocations select ancient Greek only and never turn arbitrary input into a path', () => {
+  assert.equal(gateInvocation('唤醒鲸鱼').id, 'whale'); assert.equal(gateInvocation('沉睡的光').id, 'light'); assert.equal(gateInvocation('回忆').id, 'memory');
+  for (const text of ['../../private', '一个陌生人的名字', 'https://example.invalid']) assert.equal(gateInvocation(text).file, 'audio/gate/grc-answer.mp3');
+  for (const line of Object.values(GATE_LINES)) { assert.doesNotMatch(line.ancient, /[\u4e00-\u9fffA-Za-z]/); assert.match(line.ancient, /[\u0370-\u03ff\u1f00-\u1fff]/); assert.ok(line.meaning); }
+});
+
+test('optional Chinese narration cannot play at the gate even when explicitly enabled', () => {
+  const sound = new OceanSound(); sound.enabled = true; sound.narration = true; sound.site = 'gate';
+  assert.equal(sound.chant('这句话不能发声', { explicit: true }), false);
+  sound.site = 'palace'; sound.gateEcho.status = 'speaking';
+  assert.equal(sound.chant('这句话也不能发声', { explicit: true }), false);
+});
+
+test('gate audio unlock does not wait for the orchestral sample download', async () => {
+  const originalDocument = globalThis.document; globalThis.document = { hidden: false };
+  const { sound } = fixture(); let finishMusic; let setScene = false;
+  Object.setPrototypeOf(sound, OceanSound.prototype);
+  sound.master = { gain: { setTargetAtTime() {} } };
+  sound.creatureAudio.prepare = () => Promise.resolve();
+  sound.orchestra = { load: () => new Promise(resolve => { finishMusic = resolve; }), setScene() { setScene = true; }, setIntensity() {} };
+  try {
+    assert.equal(await sound.activateFromGesture({ waitForMusic: false }), true);
+    assert.equal(setScene, false); finishMusic(); await Promise.resolve(); assert.equal(setScene, true);
+  } finally { globalThis.document = originalDocument; }
 });
 
 test('an older request cannot clear the timeout of a newer invocation', async () => {

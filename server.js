@@ -36,8 +36,8 @@ const server = http.createServer(async (request, response) => {
         for await (const chunk of request) { bytes += chunk.length; if (bytes > 1500) return json(response, 413, { error: '回声文字过长。' }); chunks.push(chunk); }
         const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); gateText(payload.text);
         const audio = await synthesizeGate(payload.text);
-        response.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': audio.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(audio);
-      } catch { return json(response, 503, { error: '本机深声未就绪，将尝试设备语音。' }); }
+        response.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Content-Length': audio.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(audio);
+      } catch { return json(response, 503, { error: '本地古希腊语男声音色未就绪。请运行 npm run audio:gate；不会改用中文朗读。' }); }
       finally { gateBusy = false; }
       return;
     }

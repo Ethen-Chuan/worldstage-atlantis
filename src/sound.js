@@ -29,7 +29,7 @@ export class OceanSound {
     await this.activateFromGesture(); return this.enabled;
   }
 
-  async activateFromGesture() {
+  async activateFromGesture({ waitForMusic = true } = {}) {
     if (this.userMuted || document.hidden) return false;
     if (!this.context) this.create();
     if (this.context.state !== 'running') await this.context.resume();
@@ -37,8 +37,8 @@ export class OceanSound {
     this.enabled = true; this.unlocked = true;
     this.master.gain.setTargetAtTime(0.85, this.context.currentTime, 0.3); this.onChange();
     void this.creatureAudio.prepare();
-    try { await this.orchestra.load(); if (this.enabled) { this.orchestra.setScene(this.site); this.orchestra.setIntensity(this.intensity, this.trial, this.paused); } }
-    catch { this.onChange(); }
+    const musicReady = this.orchestra.load().then(() => { if (this.enabled) { this.orchestra.setScene(this.site); this.orchestra.setIntensity(this.intensity, this.trial, this.paused); } }).catch(() => this.onChange());
+    if (waitForMusic) await musicReady;
     return true;
   }
 
@@ -157,6 +157,7 @@ export class OceanSound {
   }
 
   chant(text, { explicit = false, cancelGate = true, onend = () => {} } = {}) {
+    if (this.site === 'gate' || ['loading', 'speaking'].includes(this.gateEcho.status)) return false;
     if (!this.enabled || this.userMuted || this.paused || (!this.narration && !explicit) || !globalThis.speechSynthesis) return false;
     const voices = speechSynthesis.getVoices().filter(voice => voice.localService && /^zh/i.test(voice.lang));
     const voice = voices.find(voice => /Grandpa|Rocko|Reed|Li-mu|Yunxi/i.test(voice.name)) || voices[0];

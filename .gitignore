@@ -9,3 +9,4 @@ work/
 .impeccable.md
 public/audio/orchestra/*.mp3
 public/audio/voices/*.mp3
+public/audio/gate/*.mp3

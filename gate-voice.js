@@ -1,10 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { gateInvocation } from './src/gate-language.js';
 
-const execute = promisify(execFile);
 export function hasAudiblePCM(audio) {
   if (audio.length < 44 || audio.toString('ascii', 0, 4) !== 'RIFF' || audio.toString('ascii', 8, 12) !== 'WAVE') return false;
   let format; let data;
@@ -25,16 +21,8 @@ export function gateText(value) {
 }
 
 export async function synthesizeGate(value) {
-  const text = gateText(value);
-  if (process.platform !== 'darwin') throw new Error('本机语音不可用。');
-  const directory = await mkdtemp(path.join(tmpdir(), 'worldstage-echo-'));
-  try {
-    const output = path.join(directory, 'echo.wav');
-    const input = path.join(directory, 'invocation.txt');
-    await writeFile(input, text, { mode: 0o600 });
-    await execute('/usr/bin/say', ['-v', 'Grandpa (中文（中国大陆）)', '-r', '118', '-o', output, '--file-format=WAVE', '--data-format=LEI16@22050', '-f', input], { timeout: 18000, maxBuffer: 2048 });
-    const audio = await readFile(output);
-    if (audio.length > 6000000 || !hasAudiblePCM(audio)) throw new Error('本机语音未完成。');
-    return audio;
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  const invocation = gateInvocation(gateText(value));
+  const audio = await readFile(new URL(`./public/${invocation.file}`, import.meta.url));
+  if (audio.length < 1000 || audio.length > 2000000) throw new Error('古希腊语音色未就绪。');
+  return audio;
 }

@@ -11,3 +11,11 @@ for (const file of ['mermaid-song.mp3', 'distant-whale.mp3']) {
   catch { throw new Error(`Missing creature voice ${file}. Run npm run audio:voices first.`); }
 }
 console.log('Lyrical song and recorded whale assets ready.');
+const gateManifest = JSON.parse(await fs.readFile(new URL('../public/audio/gate/manifest.json', import.meta.url), 'utf8'));
+for (const file of gateManifest.files) {
+  try {
+    const info = await fs.stat(new URL(`../public/audio/gate/${file}`, import.meta.url));
+    if (info.size < 1000) throw new Error('Empty asset');
+  } catch { throw new Error(`Missing ancient Greek gate voice ${file}. Run npm run audio:gate first (uv, Python 3.12 and FFmpeg required).`); }
+}
+console.log('Seven ancient Greek male gate responses ready. No Chinese fallback.');

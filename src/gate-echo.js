@@ -1,48 +1,46 @@
+import { gateInvocation } from './gate-language.js';
+
 export class GateEcho {
-  constructor(sound) { this.sound = sound; this.revision = 0; this.status = 'idle'; this.nodes = []; }
+  constructor(sound) { this.sound = sound; this.revision = 0; this.status = 'idle'; this.nodes = []; this.buffers = new Map(); }
   async speak(text) {
-    this.stop(); const revision = this.revision; const sound = this.sound;
+    this.stop(); globalThis.speechSynthesis?.cancel(); const revision = this.revision; const sound = this.sound;
+    this.invocation = gateInvocation(text);
     if (!sound.enabled || sound.userMuted || sound.paused || sound.context?.state !== 'running') { this.status = 'muted'; return false; }
     this.status = 'loading'; const controller = new AbortController(); this.controller = controller;
     const loadTimer = setTimeout(() => controller.abort(), 20000); this.loadTimer = loadTimer;
     try {
-      const response = await fetch('./api/gate-voice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: String(text).slice(0, 160) }), signal: controller.signal });
-      if (!response.ok || !response.headers.get('content-type')?.startsWith('audio/')) throw new Error('Local voice unavailable');
-      const buffer = await sound.context.decodeAudioData(await response.arrayBuffer());
-      if (!(buffer.duration > 0.2)) throw new Error('Empty voice');
+      const invocation = this.invocation;
+      let buffer = this.buffers.get(invocation.id);
+      if (!buffer) {
+        const response = await fetch(`./${invocation.file}`, { signal: controller.signal });
+        if (!response.ok || !response.headers.get('content-type')?.startsWith('audio/')) throw new Error('Local voice unavailable');
+        const audio = await response.arrayBuffer();
+        if (audio.byteLength > 2000000) throw new Error('Voice asset too large');
+        buffer = await sound.context.decodeAudioData(audio);
+        if (!(buffer.duration > 0.2 && buffer.duration < 35)) throw new Error('Empty voice');
+        this.buffers.set(invocation.id, buffer);
+      }
       if (revision !== this.revision || !sound.enabled || sound.userMuted || sound.paused || sound.context.state !== 'running') return false;
-      const context = sound.context; const source = context.createBufferSource(); source.buffer = buffer; source.playbackRate.value = 0.86;
-      const filter = context.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 2600;
-      const gain = context.createGain(); gain.gain.value = 0.7;
-      const delay = context.createDelay(2); delay.delayTime.value = 0.62;
-      const echo = context.createGain(); echo.gain.value = 0.26;
-      const feedback = context.createGain(); feedback.gain.value = 0.32;
-      source.connect(filter).connect(gain).connect(sound.effectsGain); gain.connect(sound.reverb);
+      const context = sound.context; const source = context.createBufferSource(); source.buffer = buffer; source.playbackRate.value = 1;
+      const filter = context.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 3400;
+      const chest = context.createBiquadFilter(); chest.type = 'lowshelf'; chest.frequency.value = 180; chest.gain.value = 2;
+      const gain = context.createGain(); gain.gain.value = 0.92;
+      const delay = context.createDelay(2); delay.delayTime.value = 0.54;
+      const echo = context.createGain(); echo.gain.value = 0.18;
+      const feedback = context.createGain(); feedback.gain.value = 0.22;
+      source.connect(filter).connect(chest).connect(gain).connect(sound.effectsGain); gain.connect(sound.reverb);
       filter.connect(delay).connect(echo).connect(sound.effectsGain); delay.connect(feedback).connect(delay);
-      this.nodes = [source, filter, gain, delay, echo, feedback]; this.source = source; this.status = 'speaking';
-      sound.musicGain.gain.setTargetAtTime(sound.levels.music * 0.3, context.currentTime, 0.3);
+      this.nodes = [source, filter, chest, gain, delay, echo, feedback]; this.source = source; this.status = 'speaking';
+      sound.musicGain.gain.setTargetAtTime(sound.levels.music * 0.22, context.currentTime, 0.3);
       source.onended = () => { this.cleanupTimer = setTimeout(() => { if (revision === this.revision) this.stop(); }, 2200); };
       source.start(); return true;
     } catch {
       if (revision !== this.revision) return false;
-      await this.waitForVoices();
-      if (revision !== this.revision || !sound.enabled || sound.userMuted || sound.paused) return false;
-      this.device = true;
-      const played = sound.chant(text, { explicit: true, cancelGate: false, onend: () => { if (revision === this.revision) this.stop(); } });
-      this.status = played ? 'device-voice' : 'unavailable'; this.device = played; sound.onChange?.(); return played;
+      this.status = 'unavailable'; sound.creatureAudio?.restoreMusic(); sound.onChange?.(); return false;
     } finally { clearTimeout(loadTimer); }
   }
-  waitForVoices() {
-    const engine = globalThis.speechSynthesis;
-    if (!engine || engine.getVoices().length) return Promise.resolve();
-    return new Promise(resolve => {
-      const finish = () => { clearTimeout(timer); engine.removeEventListener?.('voiceschanged', finish); this.cancelVoiceWait = null; resolve(); };
-      const timer = setTimeout(finish, 1500); this.cancelVoiceWait = finish; engine.addEventListener?.('voiceschanged', finish, { once: true });
-    });
-  }
   stop() {
-    this.revision++; this.controller?.abort(); clearTimeout(this.cleanupTimer); clearTimeout(this.loadTimer); this.cancelVoiceWait?.();
-    if (this.device) { this.device = false; globalThis.speechSynthesis?.cancel(); }
+    this.revision++; this.controller?.abort(); clearTimeout(this.cleanupTimer); clearTimeout(this.loadTimer);
     if (this.source) { this.source.onended = null; try { this.source.stop(); } catch {} }
     this.nodes.forEach(node => node.disconnect()); this.nodes = []; this.source = null; this.status = 'idle';
     this.sound.creatureAudio?.restoreMusic();
