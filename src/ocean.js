@@ -31,6 +31,7 @@ import { PalaceDistrict } from './palace-district.js';
 import { travelGaze } from './travel-gaze.js';
 import { SunsetSea } from './sunset-sea.js';
 import { FrameBudget } from './frame-budget.js';
+import { AutoNavigation } from './auto-navigation.js';
 
 class OceanOcclusionPass extends GTAOPass {
   render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
@@ -81,6 +82,7 @@ export class Ocean {
     this.movement = new Set();
     this.navigationVelocity = new THREE.Vector3();
     this.collisions = new CollisionWorld();
+    this.navigator = new AutoNavigation(this.collisions);
     this.cruising = false;
     this.travelTarget = null;
     this.uniforms = { time: { value: 0 }, offset: { value: this.worldOffset }, night: { value: 0 }, skyTop: { value: new THREE.Color().setRGB(0.075, 0.29, 0.32) }, skyBottom: { value: new THREE.Color().setRGB(0.012, 0.04, 0.055) }, skySun: { value: 1 } };
@@ -116,8 +118,7 @@ export class Ocean {
     this.controls.maxPolarAngle = Math.PI * 0.85;
     this.controls.maxTargetRadius = Infinity;
     this.controls.addEventListener('start', () => {
-      this.palaceRoute = null;
-      this.travelTarget = null;
+      this.cancelTravel();
       if (this.flight) {
         this.flight = null;
         Object.values(this.creatures).forEach(creature => { if (creature.root.userData.mode === 'guide') creature.root.userData.mode = 'follow'; });
@@ -297,36 +298,51 @@ export class Ocean {
 
   worldPosition() { return this.camera.position.clone().add(this.worldOffset); }
 
-  travelTo(point, target = null) {
+  cancelTravel() {
+    if (this.travelTarget) this.navigationVelocity.set(0, 0, 0);
+    this.travelTarget = null; this.palaceRoute = null; this.travelAfterPalace = null; this.navigator.cancel();
+  }
+
+  travelTo(point, target = null, { indoor = false, through = false, speed = 0 } = {}) {
+    if (!indoor) { this.palaceRoute = null; this.travelAfterPalace = null; }
+    this.flight = null;
     this.cruising = false;
     this.movement.clear();
     this.navigationVelocity.set(0, 0, 0);
+    this.embodiment?.clearOrbitMomentum();
     this.travelTarget = new THREE.Vector3(...point);
     this.travelOrigin = this.worldPosition();
     this.travelOriginLook = this.controls.target.clone().add(this.worldOffset);
     this.travelLook = target ? new THREE.Vector3(...target) : this.travelOriginLook.clone().add(this.travelTarget.clone().sub(this.travelOrigin));
     this.travelElapsed = 0;
     this.travelDuration = Math.max(1.8, Math.min(24, this.travelOrigin.distanceTo(this.travelTarget) / 64));
+    this.travelDirection = this.camera.getWorldDirection(new THREE.Vector3());
+    this.navigator.start(this.travelOrigin, this.travelTarget, { indoor, through, speed });
   }
 
-  enterPalace(id) {
+  sailTo(point, target = null) {
+    this.cancelTravel();
+    if (this.palace.roomAt(this.worldPosition()) && this.enterPalace('exit', { point, target })) return;
+    this.travelTo(point, target);
+  }
+
+  enterPalace(id, continuation = null) {
     const route = this.palace.route(this.worldPosition(), id);
     if (!route) return false;
     this.embodiment.exit(false); this.play.stop(); this.flight = null;
-    this.palaceRoute = route; this.advancePalaceRoute(); return true;
+    this.travelAfterPalace = continuation; this.palaceRoute = route; this.advancePalaceRoute(); return true;
   }
 
   advancePalaceRoute() {
     const route = this.palaceRoute; if (!route) return;
     const destination = route.points.shift();
     if (!destination) { this.palaceRoute = null; return; }
-    this.travelTo(destination, route.points[0] || route.target);
+    this.travelTo(destination, route.points[0] || route.target, { indoor: true, through: route.points.length > 0, speed: this.navigator.status === 'arrived' ? this.navigator.speed : 0 });
     this.travelDuration = Math.max(1.5, this.travelOrigin.distanceTo(this.travelTarget) / 12);
   }
 
   restoreView(view) {
-    this.palaceRoute = null;
-    this.travelTarget = null;
+    this.cancelTravel();
     this.flight = null;
     this.cruising = false;
     this.movement.clear();
@@ -365,17 +381,31 @@ export class Ocean {
     const forward = this.camera.getWorldDirection(new THREE.Vector3()); forward.y = 0; forward.normalize();
     const right = new THREE.Vector3(-forward.z, 0, forward.x);
     const velocity = new THREE.Vector3();
+    const automatic = Boolean(this.travelTarget);
+    if (!automatic && !['idle', 'cancelled', 'arrived', 'blocked'].includes(this.navigator.status)) this.cancelTravel();
     if (this.travelTarget) {
-      this.travelElapsed += delta;
-      const progress = Math.min(1, this.travelElapsed / this.travelDuration);
-      const eased = progress * progress * (3 - 2 * progress);
-      this.camera.position.lerpVectors(this.travelOrigin, this.travelTarget, eased).sub(this.worldOffset);
-      const lift = this.palaceRoute ? 0 : Math.min(22, this.travelDuration);
-      this.camera.position.y += Math.sin(progress * Math.PI) * lift;
-      const tangent = this.travelTarget.clone().sub(this.travelOrigin);
-      tangent.y += Math.cos(progress * Math.PI) * lift * Math.PI;
-      this.controls.target.copy(travelGaze(this.worldPosition(), tangent, this.travelOriginLook, this.travelLook, progress, this.travelOrigin)).sub(this.worldOffset);
-      if (progress === 1) { this.travelTarget = null; if (this.palaceRoute?.points.length) this.advancePalaceRoute(); else { this.palaceRoute = null; this.callbacks.onTravelArrive?.(); } }
+      const position = this.navigator.step(delta, global);
+      this.camera.position.copy(position).sub(this.worldOffset);
+      this.travelElapsed = this.navigator.elapsed;
+      const remaining = this.navigator.remaining(position);
+      const progress = remaining < 18 ? 0.78 + 0.22 * (1 - remaining / 18) : Math.min(0.5, this.travelElapsed * 0.12);
+      const look = travelGaze(position, this.navigator.direction, this.travelOriginLook, this.travelLook, progress, this.travelOrigin);
+      const direction = look.clone().sub(position).normalize();
+      const rotation = new THREE.Quaternion().setFromUnitVectors(this.travelDirection, direction);
+      this.travelDirection.applyQuaternion(new THREE.Quaternion().slerp(rotation, 1 - Math.exp(-delta * 4))).normalize();
+      this.controls.target.copy(position).addScaledVector(this.travelDirection, Math.max(2, look.distanceTo(position))).sub(this.worldOffset);
+      if (this.navigator.status === 'arrived') {
+        this.travelTarget = null;
+        if (this.palaceRoute?.points.length) this.advancePalaceRoute();
+        else if (this.travelAfterPalace) {
+          const continuation = this.travelAfterPalace;
+          this.travelTo(continuation.point, continuation.target);
+        }
+        else { this.palaceRoute = null; this.callbacks.onTravelArrive?.(); }
+      } else if (this.navigator.status === 'blocked') {
+        this.travelTarget = null; this.palaceRoute = null; this.travelAfterPalace = null;
+        this.callbacks.onError?.(this.navigator.reason === 'occupied' ? '前方生物持续占用通道，已在安全处等候。可以稍后重试，或拖动画面接管。' : '暂时找不到足够宽的安全通道，已留在安全处；可以更换目的地或拖动画面接管。');
+      }
     } else if (!this.embodiment?.active) {
       if (this.cruising || this.movement.has('forward')) velocity.addScaledVector(forward, 30);
       if (this.movement.has('back')) velocity.addScaledVector(forward, -30);
@@ -387,10 +417,9 @@ export class Ocean {
     }
     this.navigationVelocity.lerp(velocity, 1 - Math.exp(-delta * 8));
     velocity.copy(this.navigationVelocity).multiplyScalar(delta); this.camera.position.add(velocity); this.controls.target.add(velocity);
-    if (!this.embodiment?.active && global.distanceToSquared(this.worldPosition()) > 0) {
+    if (!automatic && !this.embodiment?.active && global.distanceToSquared(this.worldPosition()) > 0) {
       const desired = this.worldPosition(); const safe = this.collisions.move(global, desired, { radius: 2 });
       const correction = safe.sub(desired); this.camera.position.add(correction); this.controls.target.add(correction);
-      if (this.travelTarget && correction.lengthSq() > 0.25) { this.travelTarget = null; this.palaceRoute = null; this.callbacks.onError?.('前方有实体阻挡，已停下航行；可以上浮绕行，或在海图选择快速抵达。'); }
     }
     const arrived = this.worldPosition();
     const floor = seaHeight(arrived.x, arrived.z) + 5 - this.worldOffset.y;

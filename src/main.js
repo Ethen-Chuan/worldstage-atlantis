@@ -69,7 +69,7 @@ document.querySelector('#app').innerHTML = `
   </main>`;
 
 const elements = Object.fromEntries([...document.querySelectorAll('[id]')].map(element => [element.id, element]));
-document.querySelector('.edition small').textContent = '0.14.1 · 潮流分层';
+document.querySelector('.edition small').textContent = '0.14.2 · 自动航路';
 let state = initialCreation();
 let journeyState = initialState();
 let ocean;
@@ -381,7 +381,7 @@ document.addEventListener('pointerup', unlockScore, { capture: true });
 document.addEventListener('keydown', unlockScore, { capture: true });
 updateAudioUI();
 function cancelNavigation() {
-  if (ocean) ocean.palaceRoute = null;
+  ocean?.cancelTravel();
   if (sound.gateEcho.status !== 'idle') sound.stopChant();
   navigationVersion++; clearTimeout(transitionTimer); elements['water-transition'].classList.remove('switching');
   elements['transition-label'].textContent = '';
@@ -389,7 +389,7 @@ function cancelNavigation() {
 for (const mode of ['quick', 'sail']) elements[`mode-${mode}`].addEventListener('click', () => {
   travelMode = mode;
   for (const option of ['quick', 'sail']) elements[`mode-${option}`].setAttribute('aria-pressed', String(option === mode));
-  elements['travel-mode-note'].textContent = mode === 'quick' ? '默认快速切换，世界和你的造物不会重置。' : '看沿途景色。拖动或方向键可随时接管，暂停可停下。'; previewIntent();
+  elements['travel-mode-note'].textContent = mode === 'quick' ? '默认快速切换，世界和你的造物不会重置。' : '自动绕开建筑、减速避让生物。拖动或方向键可随时接管，暂停可停下。'; previewIntent();
 });
 async function navigate(region, requestedMode = travelMode) {
   if (!ocean) return;
@@ -403,14 +403,15 @@ async function navigate(region, requestedMode = travelMode) {
   panel('journey', false); elements.discovery.hidden = true; elements['place-name'].textContent = landmark.name;
   recentResult = null; renderState(); document.body.classList.add('has-explored');
   if (requestedMode === 'sail') {
-    ocean.travelTo(landmark.camera, landmark.target);
-    elements['response-line'].textContent = `沿着海流，前往${landmark.name}。`; elements['action-label'].textContent = '沿途漫游 · 方向键或拖动可随时接管';
+    ocean.prepareDestination(landmark);
+    ocean.sailTo(landmark.camera, landmark.target);
+    elements['response-line'].textContent = `沿着海流，前往${landmark.name}；自动绕开沿途障碍。`; elements['action-label'].textContent = '规划自动航路 · 方向键或拖动可随时接管';
     return;
   }
   const started = performance.now();
   elements['transition-label'].textContent = `正在抵达 · ${landmark.name}`;
   elements['water-transition'].classList.add('switching');
-  ocean.travelTarget = null; ocean.cruising = false; ocean.movement.clear();
+  ocean.cancelTravel(); ocean.cruising = false; ocean.movement.clear();
   await new Promise(resolve => setTimeout(resolve, ocean.reduced ? 0 : 130));
       if (version !== navigationVersion) return;
   try {
@@ -481,7 +482,7 @@ document.addEventListener('keydown', event => {
   if (!ocean || event.target.matches('input, textarea, select') || document.querySelector('dialog[open]') || document.body.classList.contains('panel-open')) return;
   if (event.code === 'KeyM' && !event.repeat && !event.metaKey && !event.ctrlKey) { event.preventDefault(); panel('chart', true); return; }
   const movementKey = { KeyW: 'forward', ArrowUp: 'forward', KeyS: 'back', ArrowDown: 'back', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', KeyQ: 'up', KeyE: 'down', ShiftLeft: 'fast', ShiftRight: 'fast' }[event.code];
-  if (movementKey) { event.preventDefault(); cancelNavigation(); ocean.travelTarget = null; ocean.movement.add(movementKey); document.body.classList.add('has-explored'); return; }
+  if (movementKey) { event.preventDefault(); cancelNavigation(); ocean.cancelTravel(); ocean.movement.add(movementKey); document.body.classList.add('has-explored'); return; }
   if (event.target !== ocean.renderer.domElement) return;
   if (event.code === 'Space') { event.preventDefault(); direct(state.paused ? 'resume' : 'pause'); }
   const movement = { ArrowLeft: [-2, 0], ArrowRight: [2, 0], ArrowUp: [0, -2], ArrowDown: [0, 2] }[event.key];
@@ -543,7 +544,7 @@ async function renderWorldAction({ kind, args }) {
     if (ocean.currentLandmark?.id !== 'garden') return { ok: false, message: '先前往鲸落花园，在它的海床旁观看这段时间叙事。' };
     panel('tools', false); wakeWorld(); ocean.whaleFall.start(); updateEmbodimentUI(); elements.discovery.hidden = true; elements['response-line'].textContent = '海流放慢，观察巨鲸留下的生命馈赠。'; document.body.classList.add('has-explored'); return;
   }
-  if (kind === 'cruise') { ocean.cruising = args.enabled; ocean.travelTarget = null; if (args.enabled) wakeWorld(); renderState(); document.body.classList.add('has-explored'); return; }
+  if (kind === 'cruise') { ocean.cruising = args.enabled; ocean.cancelTravel(); if (args.enabled) wakeWorld(); renderState(); document.body.classList.add('has-explored'); return; }
   if (kind === 'calm') { ocean.play.calm(); toast('光与和声正在缓缓回落。'); return; }
   if (kind === 'release-view') { endEmbodiment(); return; }
   if (kind === 'trial') { panel('tools', false); wakeWorld(); ocean.play.start(args.site, args.species); updateEmbodimentUI(); document.body.classList.add('has-explored'); ocean.renderer.domElement.focus({ preventScroll: true }); return; }
@@ -632,7 +633,7 @@ elements['inhabit-trial'].addEventListener('click', () => elements['trial-start'
 function toggleEmbodiedChat(open) { document.body.classList.toggle('embodied-chat', open); elements['inhabit-speak'].setAttribute('aria-expanded', String(open)); elements['inhabit-speak'].textContent = open ? '收起对话' : '对世界说话'; if (open) { ocean.movement.clear(); elements.message.focus(); } }
 elements['inhabit-speak'].addEventListener('click', () => toggleEmbodiedChat(!document.body.classList.contains('embodied-chat')));
 for (const button of document.querySelectorAll('[data-swim]')) {
-  button.addEventListener('pointerdown', event => { event.preventDefault(); if (!ocean) return; button.setPointerCapture(event.pointerId); ocean.movement.add(button.dataset.swim); });
+  button.addEventListener('pointerdown', event => { event.preventDefault(); if (!ocean) return; cancelNavigation(); ocean.cancelTravel(); button.setPointerCapture(event.pointerId); ocean.movement.add(button.dataset.swim); });
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, () => ocean?.movement.delete(button.dataset.swim));
 }
 elements['trial-start'].addEventListener('click', () => dispatchWorld(worldAction('trial', { site: ocean?.currentLandmark?.id, species: ['manta', 'shark', 'turtle', 'whale'].includes(ocean?.embodiment.active?.species) ? ocean.embodiment.active.species : 'manta' })));
@@ -730,10 +731,14 @@ async function boot() {
         const site = ocean.surface.blend > 0.5 ? 'sunset' : ocean.currentLandmark?.id || ocean.currentBiome?.id;
         if (site !== soundtrackSite) { soundtrackSite = site; sound.setScene(site); }
         elements['place-caption'].textContent = `${String(bearing).padStart(3, '0')}° / ${Math.round(position.x)} E · ${Math.round(-position.z)} N`;
-        if (ocean.travelTarget) elements['action-label'].textContent = `沿海流航行 · ${Math.round(ocean.travelElapsed / ocean.travelDuration * 100)}% · 拖动画面即可接管`;
+        if (ocean.travelTarget) {
+          const navigation = ocean.navigator.inspect(position);
+          const label = { planning: '正在规划安全航路', avoiding: '正在减速绕行', waiting: '等待生物通过' }[navigation.status] || (navigation.detour ? '沿安全航路绕行' : '沿海流自动航行');
+          elements['action-label'].textContent = `${state.paused ? '航行已暂停' : label} · 余程 ${navigation.remaining} m · 拖动可接管`;
+        }
         discover(ocean.currentLandmark);
         if (!elements['journey-panel'].hidden) for (const landmark of LANDMARKS) document.querySelector(`[data-distance="${landmark.id}"]`).textContent = `${Math.round(Math.hypot(position.x - landmark.center[0], position.z - landmark.center[2]))} m${nearest.id === landmark.id ? ' · 最近的遗迹' : ''}`;
-        if (modelRequest || !recentResult?.changed || recentResult.issues.length || state.paused) return;
+        if (modelRequest || ocean.travelTarget || !recentResult?.changed || recentResult.issues.length || state.paused) return;
         const growing = ocean.creationScene.inspect().filter(item => item.growing); elements['action-label'].textContent = growing.length ? `${growing.length} 个造物正在成形 · 可以随时暂停` : '改变已应用 · 接着描述，世界会记住上一次改变';
       },
       onPerformance: fps => {
@@ -749,6 +754,7 @@ async function boot() {
     readyMilliseconds = Math.round(performance.now() - loadingStarted);
     window.__WORLDSTAGE__ = { ready: true, inspect: () => ({ ...ocean.inspect(), position: ocean.worldPosition().toArray(), offset: ocean.worldOffset.toArray(), streaming: ocean.endless.inspect(), biome: ocean.currentBiome, landmark: ocean.currentLandmark?.id || null, visited: [...discovered], traveling: Boolean(ocean.travelTarget), switching: elements['water-transition'].classList.contains('switching'), travelMode, readyMilliseconds, latestTransition, media: mediaExperience.inspect(), chart: seaChart.inspect(), embodiment: ocean.embodiment.inspect(), play: ocean.play.inspect(), audio: sound.inspect(), state: structuredClone(state), engine, transcript: structuredClone(transcript) }) }; if (import.meta.env.DEV) window.__ART__ = ocean;
     window.__WORLDSTAGE__.planning = () => director.inspect();
+    window.__WORLDSTAGE__.navigation = () => ocean.navigator.inspect(ocean.worldPosition());
     window.__WORLDSTAGE__.stories = () => stories.inspect();
     window.__WORLDSTAGE__.guide = () => structuredClone(creationGuide);
     window.__WORLDSTAGE__.performance = () => ({ ...ocean.frameBudget.inspect(), startup: structuredClone(startupStages), readyMilliseconds });
