@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { seaHeight } from './terrain.js';
 import { PalaceWorkshop, palaceMaterials, beam, column, moldingFrame, shellCrest } from './palace-craft.js';
-import { crownDome, decorateRoom, imperialPortal } from './palace-ornaments.js';
+import { decorateRoom } from './palace-ornaments.js';
+import { buildSanctuary, sanctuaryMaterials } from './palace-sanctuary.js';
 
 export const PALACE_CENTER = [-610, 0, 440];
 export const PALACE_ROOMS = Object.freeze([
@@ -31,17 +32,6 @@ function roomVisibleThroughDoors(lateral, depth, current, destination) {
 
 function ring(shop, material, position, radius, vertical = false) {
   shop.add('ring', material, position, [radius, radius, radius], [vertical ? 0 : Math.PI / 2, 0, 0]);
-}
-
-function rail(shop, start, end, bottom = 1, height = 3) {
-  const length = Math.hypot(end[0] - start[0], end[1] - start[1]);
-  const angle = Math.atan2(end[0] - start[0], end[1] - start[1]);
-  shop.add('box', 'pale', [(start[0] + end[0]) / 2, bottom + height, (start[1] + end[1]) / 2], [0.65, 0.45, length], [0, angle, 0]);
-  const count = Math.ceil(length / 2.8);
-  for (let index = 0; index <= count; index++) {
-    const progress = index / count; const horizontal = THREE.MathUtils.lerp(start[0], end[0], progress); const depth = THREE.MathUtils.lerp(start[1], end[1], progress);
-    shop.add('baluster', 'ivory', [horizontal, bottom, depth], [0.8, height, 0.8], [0, 0, 0], false, '车雕石栏杆');
-  }
 }
 
 function arch(shop, horizontal, depth, bottom, width, height, side = false) {
@@ -265,132 +255,44 @@ function furnishings(room, materials) {
   return shop.finish(room.name);
 }
 
-function tower(shop, horizontal, depth, bottom, height, radius, domed = false) {
-  shop.add('cylinder', 'stone', [horizontal, bottom + height / 2, depth], [radius, height, radius], [0, 0, 0], true);
-  shop.add('cylinder', 'pale', [horizontal, bottom + 1.4, depth], [radius * 1.14, 2.8, radius * 1.14]);
-  for (let tier = 0; tier < 4; tier++) {
-    const elevation = bottom + 4 + tier * (height - 7) / 3;
-    shop.add('cylinder', 'pale', [horizontal, elevation, depth], [radius * 1.07, 1.1, radius * 1.07]);
-    ring(shop, 'gold', [horizontal, elevation + 0.7, depth], radius * 1.07);
-    for (let side = 0; side < 8; side++) {
-      const angle = side / 8 * Math.PI * 2;
-      const place = (across, above, material, scale) => {
-        const reach = radius + 0.24;
-        shop.add('box', material, [horizontal + Math.sin(angle) * reach + Math.cos(angle) * across, elevation + above, depth + Math.cos(angle) * reach - Math.sin(angle) * across], scale, [0, angle, 0]);
-      };
-      shop.add('box', 'light', [horizontal + Math.sin(angle) * (radius + 0.08), elevation + 4, depth + Math.cos(angle) * (radius + 0.08)], [1, 3.7, 0.25], [0, angle, 0]);
-      for (const edge of [-1, 1]) place(edge * 0.76, 4, 'pale', [0.22, 4.7, 0.32]);
-      place(0, 1.65, 'gold', [1.9, 0.2, 0.5]); place(0, 6.4, 'pale', [1.9, 0.35, 0.5]);
-    }
-  }
-  if (domed) {
-    crownDome(shop, horizontal, depth, bottom + height, radius * 1.14);
-    for (let columnIndex = 0; columnIndex < 12; columnIndex++) {
-      const angle = columnIndex / 12 * Math.PI * 2;
-      column(shop, horizontal + Math.sin(angle) * (radius + 0.5), depth + Math.cos(angle) * (radius + 0.5), bottom + height - 14, 13.2, 0.43);
-    }
-  } else {
-    shop.add('cone', 'roof', [horizontal, bottom + height + radius * 1.35, depth], [radius * 1.18, radius * 2.8, radius * 1.18], [0, 0, 0], true);
-    for (let tier = 0; tier < 4; tier++) {
-      const elevation = radius * (tier * 0.62 + 0.05); const reach = radius * 1.18 * (1 - (elevation + radius * 0.05) / (radius * 2.8));
-      ring(shop, tier ? 'roof' : 'gold', [horizontal, bottom + height + elevation, depth], reach + 0.05);
-    }
-    shop.add('cone', 'gold', [horizontal, bottom + height + radius * 2.9, depth], [0.25, radius * 0.65, 0.25]);
-  }
-  for (let edge = 0; edge < 8; edge++) {
-    const angle = edge / 8 * Math.PI * 2;
-    shop.add('box', 'pale', [horizontal + Math.sin(angle) * radius * 1.06, bottom + height + 1, depth + Math.cos(angle) * radius * 1.06], [1.5, 2.6, 1.2], [0, angle, 0]);
-    const pilasterAngle = angle + Math.PI / 8;
-    shop.add('box', 'pale', [horizontal + Math.sin(pilasterAngle) * radius, bottom + height / 2, depth + Math.cos(pilasterAngle) * radius], [0.5, height - 2, 0.5], [0, pilasterAngle, 0]);
-  }
-}
-
 export class PalaceDistrict {
   constructor(scene) {
     this.scene = scene; this.root = new THREE.Group(); this.root.name = '潮冠宫城'; this.root.visible = false; this.scene.add(this.root); this.rooms = new Map(); this.visited = new Set(); this.activeRoom = null;
-    this.frustum = new THREE.Frustum(); this.viewProjection = new THREE.Matrix4(); this.roomBounds = new THREE.Box3();
+    this.frustum = new THREE.Frustum(); this.viewProjection = new THREE.Matrix4(); this.roomBounds = new THREE.Box3(); this.portalBounds = new THREE.Box3();
   }
   prepare() {
     if (this.ready) return;
     this.ready = true; this.materials = palaceMaterials(); this.base = seaHeight(PALACE_CENTER[0], PALACE_CENTER[2]) + 12;
+    this.tideClock = sanctuaryMaterials(this.materials);
     const shop = new PalaceWorkshop(this.materials);
-    shop.add('box', 'dark', [0, -5, -25], [166, 9.6, 204], [0, 0, 0], true);
-    for (let tier = 0; tier < 3; tier++) shop.add('box', 'pale', [0, -9.5 + tier * 3.1, -25], [171 - tier * 2, 0.7, 209 - tier * 2]);
     shop.add('box', 'ivory', [0, -0.25, -27], [126, 0.5, 164], [0, 0, 0], true);
     shop.add('box', 'dark', [0, 23, -27], [126, 2, 164], [0, 0, 0], true);
-    wall(shop, [-63, 54], [63, 54], { door: true }); wall(shop, [-63, -108], [-8, -108], { window: true }); wall(shop, [8, -108], [63, -108], { window: true }); wall(shop, [-8, -108], [8, -108]);
+    wall(shop, [-63, 54], [63, 54], { door: true });
+    wall(shop, [-63, -108], [-8, -108], { window: true });
+    wall(shop, [8, -108], [63, -108], { window: true });
+    wall(shop, [-8, -108], [8, -108]);
     for (const side of [-1, 1]) {
       wall(shop, [side * 63, -108], [side * 63, 54], { side: true });
       wall(shop, [side * 8, -54], [side * 8, 0], { side: true, door: true });
       wall(shop, [side * 8, -108], [side * 8, -54], { side: true, door: true });
       wall(shop, [side * 8, -54], [side * 63, -54]);
-      for (let distance = -101; distance < 52; distance += 12) {
-        for (const elevation of [6, 15]) shop.add('box', 'light', [side * 63.78, elevation, distance], [0.15, 5.5, 2.2]);
-        column(shop, side * 66, distance, 0, 25, 0.7);
-      }
-      for (const distance of [-108, -27, 54]) tower(shop, side * 72, distance, 0, distance === -108 ? 75 : distance === 54 ? 49 : 58, 9, distance === 54);
-      for (let avenue = 0; avenue < 4; avenue++) tower(shop, side * (112 + avenue % 2 * 32), -102 + avenue * 48, -5, 30 + avenue % 3 * 9, 8);
-      shop.add('box', 'stone', [side * 123, 1, -26], [52, 2, 168], [0, 0, 0], true);
-      shop.add('box', 'pale', [side * 121, 18, -26], [18, 1.2, 154], [0, 0, 0], true);
-      for (let distance = -91; distance <= 37; distance += 16) {
-        for (const edge of [-1, 1]) column(shop, side * 121 + edge * 7, distance, 2, 15, 0.65);
-        arch(shop, side * 121, distance, 2, 14, 15);
-      }
-      for (const edge of [-1, 1]) rail(shop, [side * 121 + edge * 8, -101], [side * 121 + edge * 8, 49], 18.5, 2.5);
-      rail(shop, [side * 14, 73], [side * 81, 73], 0, 3);
-      for (let planter = 0; planter < 4; planter++) {
-        const lateral = side * (28 + planter * 14);
-        shop.add('cylinder', 'pale', [lateral, 1, 66], [2.7, 2, 2.7]);
-        shop.add('cup', 'gold', [lateral, 4, 66], [2.9, 3, 2.9]);
-        for (let stem = 0; stem < 7; stem++) {
-          const angle = stem / 7 * Math.PI * 2;
-          shop.add('sphere', 'velvet', [lateral + Math.sin(angle) * 1.4, 4 + Math.sin(stem * 3) * 0.8, 66 + Math.cos(angle) * 1.4], [0.7, 1.8, 0.7]);
-          shop.add('sphere', 'pearl', [lateral + Math.sin(angle) * 1.4, 5.6 + Math.sin(stem * 3) * 0.8, 66 + Math.cos(angle) * 1.4], [0.15, 0.22, 0.15]);
-        }
-      }
     }
     wall(shop, [-63, 0], [63, 0], { door: true });
     for (let distance = -104; distance < 55; distance += 7) {
       shop.add('box', 'gold', [0, 0.06, distance], [0.18, 0.04, 3]);
       for (const side of [-1, 1]) shop.add('box', 'gold', [side * 6, 0.06, distance], [0.12, 0.04, 7]);
     }
-    tower(shop, 0, -77, 24, 78, 21, true);
-    for (const side of [-1, 1]) tower(shop, side * 33, -60, 24, 49, 11, true);
-    tower(shop, 0, 11, 24, 33, 15, true);
-    for (const side of [-1, 1]) {
-      shop.add('box', 'stone', [side * 36, 39, 14], [31, 30, 43], [0, 0, 0], true);
-      shop.add('soft', 'roof', [side * 36, 56, 14], [33, 3, 45], [0, 0, 0], true);
-      for (const distance of [0, 28]) crownDome(shop, side * 36, distance, 57, 11.5);
-      for (const edge of [-1, 1]) rail(shop, [side * 36 + edge * 15.7, -7], [side * 36 + edge * 15.7, 35], 57.5, 2);
-      for (let tier = 0; tier < 3; tier++) {
-        shop.add('box', 'gold', [side * 36, 27 + tier * 10, 35.8], [32, 0.3, 0.3]);
-        for (let index = 0; index < 5; index++) {
-          const lateral = side * 36 + (index - 2) * 5.3;
-          shop.add('box', 'dark', [lateral, 31 + tier * 10, 35.6], [2.6, 7, 0.5]);
-          shop.add('box', 'light', [lateral, 31 + tier * 10, 35.92], [0.9, 5.8, 0.14]);
-          arch(shop, lateral, 36.1, 27 + tier * 10, 2.8, 8);
-        }
-      }
-      for (const elevation of [24.8, 34.8, 44.8, 54.5]) shop.add('box', 'pale', [side * 36, elevation, 14], [32.5, 0.7, 44.5]);
-      for (const lateral of [-14, -8, 8, 14]) shop.add('box', 'pale', [side * 36 + lateral, 39, 36], [0.6, 29, 0.8]);
-    }
     for (let depth = -102; depth < 50; depth += 13) {
       shop.add('box', 'gold', [0, 21.8, depth], [124, 0.18, 0.35]);
       for (const lateral of [-56, -35, -14, 14, 35, 56]) shop.add('box', 'gold', [lateral, 21.8, depth + 6.5], [0.3, 0.18, 13]);
     }
-    for (let step = 0; step < 6; step++) shop.add('box', step % 2 ? 'pale' : 'stone', [0, -5.5 + step * 0.8, 66 - step * 1.5], [55 - step * 2, 0.8, 4]);
-    shop.add('box', 'pale', [0, -1, 92], [23, 1.7, 78], [0, 0, 0], true);
-    for (const side of [-1, 1]) {
-      shop.add('box', 'gold', [side * 11, 3.4, 92], [0.4, 0.35, 76]);
-      for (let distance = 59; distance < 131; distance += 5) {
-        column(shop, side * 11, distance, 0, 3.3, 0.22);
-        shop.add('sphere', 'light', [side * 11, 4, distance], [0.3, 0.4, 0.3]);
-      }
-      column(shop, side * 9, 55, 0, 15, 0.75);
-    }
-    arch(shop, 0, 55, 0, 18, 19);
-    imperialPortal(shop);
-    this.root.add(shop.finish('潮冠宫城 · 铜穹与雕饰柱廊'));
+    this.shell = shop.finish('潮冠宫城 · 五室实体墙壳'); this.root.add(this.shell);
+    const exteriorShop = new PalaceWorkshop(this.materials);
+    this.sanctuary = buildSanctuary(exteriorShop);
+    this.exterior = exteriorShop.finish('潮冠宫城 · 海神圣域');
+    for (const mesh of this.exterior.children) mesh.castShadow = ['limestone', 'agedStone', 'patina', 'reef', 'carvedStone'].some(name => mesh.material === this.materials[name]);
+    const exteriorCollision = new THREE.Group(); exteriorCollision.name = '海神圣域 · 持续实体阻挡'; exteriorCollision.userData.collisionBoxes = this.exterior.userData.collisionBoxes; this.exterior.userData.collisionBoxes = [];
+    this.root.add(exteriorCollision, this.exterior);
     const entrance = new THREE.Mesh(new THREE.TorusGeometry(2, 0.08, 6, 48), this.materials.light);
     entrance.name = '进入珍珠接待厅'; entrance.position.set(0, 6, 57); entrance.userData.palaceDestination = 'reception'; this.root.add(entrance);
     const pickMaterial = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide });
@@ -407,6 +309,8 @@ export class PalaceDistrict {
     }
     this.fill = new THREE.PointLight('#ffe4b8', 0, 78, 1.25); this.fill.position.set(0, 17, 26); this.fill.castShadow = false; this.root.add(this.fill);
     this.lightTarget = new THREE.Vector3(0, 17, 26);
+    this.sanctuaryLight = new THREE.PointLight('#ffe0a0', 0, 190, 1.3); this.sanctuaryLight.position.set(-32, 62, 45); this.root.add(this.sanctuaryLight);
+    this.altarLight = new THREE.PointLight('#ffc579', 0, 72, 1.2); this.altarLight.position.set(0, 49, -72); this.root.add(this.altarLight);
   }
   roomAt(position) {
     if (!this.ready || position.y < this.base || position.y > this.base + 22) return null;
@@ -433,7 +337,7 @@ export class PalaceDistrict {
     const translate = point => new THREE.Vector3(...point).add(new THREE.Vector3(PALACE_CENTER[0], this.base, PALACE_CENTER[2])).toArray();
     return { points: points.map(translate), target: translate(room?.target || [0, 10, 145]), name: room?.name || '宫城前庭' };
   }
-  update(position, offset, delta = 1 / 60, camera = null) {
+  update(position, offset, delta = 1 / 60, camera = null, reduced = false) {
     const distance = Math.hypot(position.x - PALACE_CENTER[0], position.z - PALACE_CENTER[2]);
     if (distance < 670) this.prepare();
     if (!this.ready) return;
@@ -442,6 +346,19 @@ export class PalaceDistrict {
     if (this.activeRoom) this.visited.add(this.activeRoom.id);
     if (camera) { camera.updateMatrixWorld(); this.frustum.setFromProjectionMatrix(this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); }
     const lateral = position.x - PALACE_CENTER[0]; const depth = position.z - PALACE_CENTER[2]; const elevation = position.y - this.base;
+    const portalInView = (minimum, maximum) => {
+      this.portalBounds.min.fromArray(minimum).add(this.root.position); this.portalBounds.max.fromArray(maximum).add(this.root.position);
+      return this.frustum.intersectsBox(this.portalBounds);
+    };
+    let exteriorVisible = !camera || !this.activeRoom;
+    if (!exteriorVisible) {
+      exteriorVisible = roomVisibleThroughDoors(lateral, depth, this.activeRoom, PALACE_ROOMS[0]) && portalInView([-9, -1, 52], [9, 16, 57]);
+      if (['bedroom', 'club'].includes(this.activeRoom.id)) {
+        const center = this.activeRoom.center[0];
+        exteriorVisible ||= portalInView([center - 14.5, 3.5, -110], [center + 14.5, 18.5, -106]);
+      }
+    }
+    this.exterior.visible = exteriorVisible;
     for (const room of PALACE_ROOMS) {
       const close = Math.hypot(position.x - PALACE_CENTER[0] - room.center[0], position.z - PALACE_CENTER[2] - room.center[1]) < 95 && position.y < this.base + 38;
       if (close && !this.rooms.has(room.id)) {
@@ -460,9 +377,15 @@ export class PalaceDistrict {
     this.lightTarget.set(center[0], 17, center[1]);
     const outside = Math.max(0, Math.abs(lateral) - 63, depth - 54, -108 - depth, elevation - 22, -elevation);
     const intensity = 65 * (1 - THREE.MathUtils.smoothstep(outside, 0, 16));
-    const elapsed = Math.min(Math.max(delta, 0), 0.1);
+    const elapsed = Number.isFinite(delta) ? Math.min(Math.max(delta, 0), 0.1) : 0;
+    if (!reduced) this.tideClock.value = (this.tideClock.value + elapsed) % 3600;
+    const exteriorBlend = THREE.MathUtils.smoothstep(outside, 0, 18);
+    this.sanctuaryLight.intensity = THREE.MathUtils.damp(this.sanctuaryLight.intensity, 280 * exteriorBlend, 3, elapsed);
+    this.altarLight.intensity = THREE.MathUtils.damp(this.altarLight.intensity, 115 * exteriorBlend, 3, elapsed);
+    this.sanctuaryLight.visible = exteriorVisible && this.sanctuaryLight.intensity > 0.05;
+    this.altarLight.visible = exteriorVisible && this.altarLight.intensity > 0.05;
     this.fill.position.lerp(this.lightTarget, 1 - Math.exp(-elapsed * 3));
     this.fill.intensity = THREE.MathUtils.damp(this.fill.intensity, intensity, 4, elapsed);
   }
-  inspect() { return { ready: Boolean(this.ready), room: this.activeRoom?.id || null, visited: [...this.visited], loadedRooms: [...this.rooms.keys()], base: this.base, name: '潮冠宫城' }; }
+  inspect() { return { ready: Boolean(this.ready), room: this.activeRoom?.id || null, visited: [...this.visited], loadedRooms: [...this.rooms.keys()], base: this.base, name: '潮冠宫城', architecture: this.sanctuary?.style || null, exterior: this.exterior?.userData.craft || null }; }
 }

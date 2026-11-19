@@ -47,7 +47,7 @@ test('palace detail has bounded batches and is not duplicated when rooms are rev
     if (!object.isMesh) return;
     batches++; triangles += (object.geometry.index?.count || object.geometry.attributes.position.count) / 3 * (object.count || 1);
   });
-  assert.ok(batches < 230, `batches: ${batches}`); assert.ok(triangles < 1900000, `triangles: ${triangles}`);
+  assert.ok(batches < 250, `batches: ${batches}`); assert.ok(triangles < 1900000, `triangles: ${triangles}`);
   const children = palace.root.children.slice();
   for (let visit = 0; visit < 3; visit++) for (const room of PALACE_ROOMS) palace.update(global(room.view), new THREE.Vector3());
   assert.deepEqual(palace.root.children, children);

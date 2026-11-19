@@ -1,4 +1,4 @@
-import { beam, column, moldingFrame, shellCrest } from './palace-craft.js';
+import { column, moldingFrame, shellCrest } from './palace-craft.js';
 
 export function floorMedallion(shop, horizontal, depth, radius, elongated = 1) {
   shop.add('disc', 'mosaic', [horizontal, 0.025, depth], [radius, radius * elongated, 1], [-Math.PI / 2, 0, 0], false, '海潮石拼花');
@@ -93,41 +93,4 @@ export function decorateRoom(shop, room) {
   }
   shop.add('ring', 'gold', [horizontal, 20.58, depth], [6, 6, 3], [Math.PI / 2, 0, 0], false, '中央穹顶饰环');
   shop.add('ring', 'ivory', [horizontal, 20.63, depth], [6.45, 6.45, 5], [Math.PI / 2, 0, 0]);
-}
-
-export function imperialPortal(shop) {
-  for (const side of [-1, 1]) {
-    for (const offset of [0, 2.7]) column(shop, side * (10.8 + offset), 57, 0, 20.2, 0.91);
-    shop.add('box', 'ivory', [side * 21, 1, 60], [9, 2, 8], [0, 0, 0], true, '迎宾石台');
-    shop.add('urn', 'lapis', [side * 21, 2, 60], [6, 7, 6], [0, 0, 0], true, '海蓝釉鎏金礼瓶');
-    for (const elevation of [2.4, 4, 8.5]) shop.add('ring', 'gold', [side * 21, elevation, 60], [elevation > 8 ? 1.85 : 1.6, elevation > 8 ? 1.85 : 1.6, 1.6], [Math.PI / 2, 0, 0]);
-    for (const lateral of [29, 47]) {
-      wallPanel(shop, [side * lateral, 54.92], 12, 0);
-      for (const edge of [-1, 1]) column(shop, side * lateral + edge * 7.7, 55.3, 0, 22, 0.7);
-    }
-  }
-  for (const radius of [8, 8.75, 9.5]) shop.add('arch', radius === 8.75 ? 'gold' : 'ivory', [0, 9.8, 57.1], [radius, radius, 1.1], [0, 0, 0], false, '三重雕花门拱');
-  for (const elevation of [20.7, 21.4, 22.1]) shop.add('soft', elevation === 21.4 ? 'gold' : 'ivory', [0, elevation, 57], [31, 0.45, 4.5]);
-  shellCrest(shop, [0, 23, 57.5], 8.8);
-  for (let dentil = -14; dentil <= 14; dentil += 1.4) shop.add('box', 'gold', [dentil, 20.1, 58.9], [0.52, 0.6, 0.58], [0, 0, 0], false, '檐口齿饰');
-  for (let step = 0; step < 6; step++) for (const side of [-1, 1]) {
-    shop.add('box', 'ivory', [side * 39, -0.7 - step * 0.82, 67 + step * 2], [42 + step * 1.8, 0.8, 2.2], [0, 0, 0], true, '宫城礼仪阶梯');
-    shop.add('box', 'gold', [side * 39, -0.3 - step * 0.82, 67.8 + step * 2], [42 + step * 1.8, 0.05, 0.12]);
-  }
-}
-
-export function crownDome(shop, horizontal, depth, bottom, radius) {
-  shop.add('dome', 'roof', [horizontal, bottom, depth], [radius, radius, radius], [0, 0, 0], true, '铜绿曲面穹顶');
-  for (let rib = 0; rib < 16; rib++) {
-    const angle = rib / 16 * Math.PI * 2;
-    let previous = [horizontal + Math.sin(angle) * radius * 1.042, bottom + radius * 0.055, depth + Math.cos(angle) * radius * 1.042];
-    for (const [fraction, elevation] of [[1, 0.12], [0.976, 0.3], [0.905, 0.5], [0.77, 0.7], [0.57, 0.88], [0.31, 1.035], [0.025, 1.14]]) {
-      const reach = (fraction + 0.007) * radius;
-      const next = [horizontal + Math.sin(angle) * reach, bottom + elevation * radius, depth + Math.cos(angle) * reach];
-      beam(shop, previous, next, radius * 0.009, 'gold', '穹顶鎏金肋线'); previous = next;
-    }
-  }
-  for (const elevation of [0.02, 0.1]) shop.add('ring', 'gold', [horizontal, bottom + elevation * radius, depth], [radius * 1.04, radius * 1.04, radius * 0.65], [Math.PI / 2, 0, 0]);
-  shop.add('urn', 'gold', [horizontal, bottom + radius * 1.12, depth], [radius * 0.35, radius * 0.55, radius * 0.35]);
-  shop.add('jewel', 'light', [horizontal, bottom + radius * 1.76, depth], [radius * 0.085, radius * 0.18, radius * 0.085], [0, 0, 0], false, '穹顶宝珠');
 }

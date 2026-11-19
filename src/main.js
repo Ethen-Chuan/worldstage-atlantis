@@ -67,7 +67,7 @@ document.querySelector('#app').innerHTML = `
   </main>`;
 
 const elements = Object.fromEntries([...document.querySelectorAll('[id]')].map(element => [element.id, element]));
-document.querySelector('.edition small').textContent = '0.11.0 · 宫城精修';
+document.querySelector('.edition small').textContent = '0.12.0 · 海神圣域';
 let state = initialCreation();
 let journeyState = initialState();
 let ocean;

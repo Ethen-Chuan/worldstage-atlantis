@@ -4,7 +4,7 @@ import { chartView, projectChart, unprojectChart, fitChart, chartScale, planarDi
 import './sea-chart.css';
 
 const glyphs = {
-  crown: '<path d="M3 21V9l3-5 3 5v5h2V6l2-4 2 4v8h2V9l3-5 2 5v12H3Zm9 0v-5h3v5M4 10h4m10 0h3"/>',
+  crown: '<path d="m3 10 9-7 9 7H3Zm2 2v7m4-7v7m6-7v7m4-7v7M3 21h18M2 23h20M12 5v3"/>',
   palace: '<path d="M3 10 12 4l9 6M5 10h14M6 11v8m6-8v8m6-8v8M3 20h18"/>',
   gate: '<path d="M5 20V10a7 7 0 0 1 14 0v10M8 20V10a4 4 0 0 1 8 0v10M3 20h7m4 0h7M12 6v3"/>',
   garden: '<path d="M3 12c4-4 9-4 13-1l5-4-1 5 1 5-5-3c-5 3-10 1-13-2ZM7 11v3m4-3v4m4-4v3"/>',
