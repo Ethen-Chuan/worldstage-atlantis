@@ -200,8 +200,8 @@ export function createWhale({ falling = false } = {}) {
   };
 }
 
-export function createJellies() {
-  const bloom = createJellyBloom();
+export function createJellies(options) {
+  const bloom = createJellyBloom(options);
   bloom.root.userData = { creature: 'jelly', mode: 'idle', basePosition: new THREE.Vector3(-45, 4, 95), moveTarget: new THREE.Vector3(-45, 4, 95) };
   bloom.root.position.copy(bloom.root.userData.basePosition);
   return bloom;

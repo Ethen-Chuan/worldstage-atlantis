@@ -70,7 +70,7 @@ document.querySelector('#app').innerHTML = `
   </main>`;
 
 const elements = Object.fromEntries([...document.querySelectorAll('[id]')].map(element => [element.id, element]));
-document.querySelector('.edition small').textContent = '0.14.4 · 万象随潮';
+document.querySelector('.edition small').textContent = '0.14.5 · 柔光浮游';
 let state = initialCreation();
 let journeyState = initialState();
 let ocean;

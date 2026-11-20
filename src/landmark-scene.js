@@ -98,9 +98,9 @@ export class LandmarkScene {
         backdrop.add('rock', 'dark', [horizontal, height * 0.35 - 17, -175 - backdrop.random() * 70], [16 + backdrop.random() * 15, height, 25], [0.1, index, 0.05]);
       }
       root.add(backdrop.finish('distant-basalt-amphitheatre'));
-      const life = landmark.kind === 'garden' ? createManta() : createJellies();
+      const life = landmark.kind === 'garden' ? createManta() : createJellies(landmark.kind === 'choir' ? { span: [34, 15, 32], sizes: [0.8, 0.8] } : undefined);
       life.root.position.set(0, landmark.kind === 'choir' ? 49 : 51, 3);
-      life.root.scale.setScalar(landmark.kind === 'garden' ? 1.5 : landmark.kind === 'choir' ? 3.8 : 1.8);
+      life.root.scale.setScalar(landmark.kind === 'garden' ? 1.5 : landmark.kind === 'choir' ? 2.5 : 1.8);
       if (life.setColor) life.setColor(landmark.kind === 'choir' ? 'pearl' : 'gold');
       root.add(life.root);
       let portal = null;
